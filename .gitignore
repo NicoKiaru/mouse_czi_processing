@@ -1,0 +1,78 @@
+# Nextflow work directories and cache
+work/
+.nextflow/
+.nextflow.log*
+
+# Nextflow reports and traces
+*.html
+trace.txt
+timeline.html
+report.html
+dag.html
+dag.dot
+
+# Pipeline outputs (adjust based on your needs)
+results/
+output/
+outputs/
+
+# Data directories (usually too large for git)
+data/
+raw_data/
+test_data/
+samples/
+*.czi
+*.tif
+*.tiff
+
+# Fiji installations and caches
+fiji_*/
+Fiji.app/
+
+# Conda/Mamba environments
+.conda/
+conda-env/
+environment.yml.lock
+
+# Docker related
+.docker/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.out
+*.err
+
+# Slurm job files
+slurm-*.out
+*.sbatch
+
+# Python cache (if using Python scripts)
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files
+*.bak
+*.backup
+
+# Local configuration overrides
+local.config
+user.config
