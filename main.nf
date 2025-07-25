@@ -1,33 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
-
-process processImages {
-    tag "processing ${image.baseName}"
-    
-    input:
-    path image
-    env FIJI_PATH
-    
-    output:
-    path "processed_${image}"
-    
-    script:
-    """
-    # Echo the file paths for testing
-    echo "Fiji installation path: \${FIJI_PATH}"
-    echo "Processing image: ${image}"
-    echo "Image basename: ${image.baseName}"
-    
-    
-    # let's try to start Fiji
-    # Run Fiji with the macro
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --headless --console
-    
-    # Create a dummy output file for now
-    touch "processed_${image}"
-
-    """
-}
+include { stageFilesRSync } from './modules/upload_data'
+include { makeCziDatasetForBigstitcher; alignChannelsWithBigstitcher } from './modules/bigstitcher'
 
 workflow {
     // Check if Fiji already exists, otherwise set it up
@@ -52,7 +26,12 @@ workflow {
     // Debug: show what files were found BEFORE processing
     images = images.view { "Found input file: $it" }
     
-    // Process images - combine each image with the fiji path as environment variable
-    results = processImages(images, fiji_path)
-    results.view { "Completed: $it" }
+    stageFilesRSync(images)
+
+    // Makes a bigstitcher xml compatible file from the czi file
+    makeCziDatasetForBigstitcher(stageFilesRSync.out, fiji_path)
+
+    alignChannelsWithBigstitcher(makeCziDatasetForBigstitcher.out, fiji_path, params.bigstitcher)
+
+    //results.view { "Completed: $it" }
 }

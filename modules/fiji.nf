@@ -58,3 +58,4 @@ process useCachedFiji {
     echo "Using cached Fiji installation from ${params.fiji_cache_dir}"
     """
 }
+
