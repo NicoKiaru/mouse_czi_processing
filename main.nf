@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 include { stageFilesRSync } from './modules/upload_data'
-include { makeCziDatasetForBigstitcher; alignChannelsWithBigstitcher } from './modules/bigstitcher'
+include { makeCziDatasetForBigstitcher; alignChannelsWithBigstitcher; alignTilesWithBigstitcher; icpRefinementWithBigstitcher } from './modules/bigstitcher'
 
 workflow {
     // Check if Fiji already exists, otherwise set it up
@@ -31,7 +31,14 @@ workflow {
     // Makes a bigstitcher xml compatible file from the czi file
     makeCziDatasetForBigstitcher(stageFilesRSync.out, fiji_path)
 
-    alignChannelsWithBigstitcher(makeCziDatasetForBigstitcher.out, fiji_path, params.bigstitcher)
+    // Channel alignment
+    channel_aligned = alignChannelsWithBigstitcher(makeCziDatasetForBigstitcher.out, fiji_path, params.bigstitcher)
+
+    // Tile alignment 
+    tile_aligned = alignTilesWithBigstitcher(channel_aligned.aligned_xml, fiji_path, params.bigstitcher)
+
+    // ICP refinement
+    icp_refined = icpRefinementWithBigstitcher(tile_aligned.tile_aligned_xml, fiji_path, params.bigstitcher)
 
     //results.view { "Completed: $it" }
 }
