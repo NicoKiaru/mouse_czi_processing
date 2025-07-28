@@ -1,7 +1,13 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 include { stageFilesRSync } from './modules/upload_data'
-include { makeCziDatasetForBigstitcher; alignChannelsWithBigstitcher; alignTilesWithBigstitcher; icpRefinementWithBigstitcher; reorientToASRWithBigstitcher } from './modules/bigstitcher'
+include { 
+    makeCziDatasetForBigstitcher; 
+    alignChannelsWithBigstitcher; 
+    alignTilesWithBigstitcher; 
+    icpRefinementWithBigstitcher; 
+    reorientToASRWithBigstitcher; 
+    fuseBigStitcherDataset } from './modules/bigstitcher'
 
 workflow {
     // Check if Fiji already exists, otherwise set it up
@@ -43,6 +49,7 @@ workflow {
     // ASR Reorientation
     reoriented_to_asr = reorientToASRWithBigstitcher(icp_refined.icp_refined_xml, fiji_path, params.bigstitcher)
 
+    fused_image = fuseBigStitcherDataset(reoriented_to_asr.asr_xml, fiji_path, params.bigstitcher)
 
     //results.view { "Completed: $it" }
 }

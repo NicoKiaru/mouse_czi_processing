@@ -243,7 +243,7 @@ process reorientToASRWithBigstitcher {
     val config
     
     output:
-    path "${xml_file.baseName}_asr.xml", emit: icp_refined_xml
+    path "${xml_file.baseName}_asr.xml", emit: asr_xml
     path "asr_reorientation_log.txt", emit: log
     
     script:
@@ -288,6 +288,62 @@ process reorientToASRWithBigstitcher {
         echo "ERROR: ASR reorientation failed"
         echo "ERROR: ASR reorientation failed at: \$(date)" >> asr_reorientation_log.txt
         exit 1
+    fi
+    """
+}
+
+process fuseBigStitcherDataset {
+    tag "fuse dataset ${xml_file.baseName}"
+    // publishDir "${params.outdir}/icp_refinement", mode: 'copy'
+    
+    input:
+    path xml_file
+    env FIJI_PATH
+    val config
+    
+    output:
+    // path "${xml_file.baseName}_asr.xml", emit: icp_refined_xml
+    path "fuse_dataset_log.txt", emit: log
+    path "${xml_file.baseName}.tiff", emit: fused_image
+
+    script:
+    def fuse = config.fusion_config
+    
+    """
+    # Fuse dataset into an ome.tiff file
+    cp ${projectDir}/bin/fuse_bigstitcher_dataset.groovy .
+    
+    echo "Fusing XML dataset: ${xml_file}"
+    echo "Fusion method: ${fuse.fusion_method}"
+    
+    # Log parameters
+    echo "Fusion of XMl dataset:" > fuse_dataset_log.txt
+    echo "  Fusion method: ${fuse.fusion_method}" >> fuse_dataset_log.txt
+    
+    OUTPUT_DIR_PATH="\$(pwd)/"
+
+    echo "  XML path: ${xml_file}" >> fuse_dataset_log.txt
+    echo "  Output DIR XML path: \${OUTPUT_DIR_PATH}" >> fuse_dataset_log.txt
+    
+    # Build the parameter string with proper quoting
+    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\""
+    
+    echo "Parameters: \${PARAMS}" >> fuse_dataset_log.txt
+    
+    # Run Fiji with Fusion script
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+        --run fuse_bigstitcher_dataset.groovy \\
+        "\${PARAMS}"
+    
+    # Verify success
+    if [ -f "${xml_file.baseName}.ome.tiff" ]; then
+       mv "${xml_file.baseName}.ome.tiff" "${xml_file.baseName}.tiff"
+       echo "Successfully produced fused dataset"
+       echo "Fusion completed at: \$(date)" >> fuse_dataset_log.txt
+    else
+       echo "ERROR: Fusion failed"
+       echo "ERROR: Fusion failed at: \$(date)" >> fuse_dataset_log.txt
+       exit 1
     fi
     """
 }
