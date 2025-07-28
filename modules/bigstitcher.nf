@@ -232,3 +232,62 @@ process icpRefinementWithBigstitcher {
     fi
     """
 }
+
+process reorientToASRWithBigstitcher {
+        tag "asr reorientation ${xml_file.baseName}"
+    // publishDir "${params.outdir}/icp_refinement", mode: 'copy'
+    
+    input:
+    path xml_file
+    env FIJI_PATH
+    val config
+    
+    output:
+    path "${xml_file.baseName}_asr.xml", emit: icp_refined_xml
+    path "asr_reorientation_log.txt", emit: log
+    
+    script:
+    def reorient = config.reorientation
+    
+    """
+    # Copy the ASR reorientation script to the work directory
+    cp ${projectDir}/bin/reorient_to_asr_with_bigstitcher.groovy .
+    
+    echo "Processing XML for ASR reorientation: ${xml_file}"
+    echo "Original orientation: ${reorient.raw_orientation}"
+    echo "Perform re-orientation?: ${reorient.reorient_to_asr}"
+    
+    # Log parameters
+    echo "ASR Reorientation:" > asr_reorientation_log.txt
+    echo "  Original orientation: ${reorient.raw_orientation}" >> asr_reorientation_log.txt
+    echo "  Perform re-orientation?: ${reorient.reorient_to_asr}" >> asr_reorientation_log.txt
+    echo "  Starting ASR Reorientation at: \$(date)" >> asr_reorientation_log.txt
+    
+    # Create a copy for ASR reorientation processing
+    cp "${xml_file}" "${xml_file.baseName}_asr.xml"
+    
+    # Get the full path
+    FULL_XML_PATH="\$(pwd)/${xml_file.baseName}_asr.xml"
+    echo "Full XML path: \${FULL_XML_PATH}" >> asr_reorientation_log.txt
+    
+    # Build the parameter string with proper quoting
+    PARAMS="xml_file=\\\""\${FULL_XML_PATH}"\\\",raw_orientation=\\\"${reorient.raw_orientation}\\\",reorient_to_asr=${reorient.reorient_to_asr}"
+    
+    echo "Parameters: \${PARAMS}" >> asr_reorientation_log.txt
+    
+    # Run Fiji with ASR reorientation script
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+        --run reorient_to_asr_with_bigstitcher.groovy \\
+        "\${PARAMS}"
+    
+    # Verify success
+    if [ -f "${xml_file.baseName}_asr.xml" ]; then
+        echo "Successfully processed XML file for ASR reorientation"
+        echo "ASR reorientation completed at: \$(date)" >> asr_reorientation_log.txt
+    else
+        echo "ERROR: ASR reorientation failed"
+        echo "ERROR: ASR reorientation failed at: \$(date)" >> asr_reorientation_log.txt
+        exit 1
+    fi
+    """
+}
