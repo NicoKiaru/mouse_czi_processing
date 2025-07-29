@@ -347,3 +347,57 @@ process fuseBigStitcherDataset {
     fi
     """
 }
+
+
+
+process getVoxelSizes {
+    tag "get voxel sizes ${image_file.baseName}"
+    
+    input:
+    path image_file
+    env FIJI_PATH
+    
+    output:
+    path "get_voxel_sizes.txt", emit: log
+    path "voxel_sizes.txt", emit: voxel_file
+    tuple val("${image_file.baseName}"), env(VOXEL_X), env(VOXEL_Y), env(VOXEL_Z), emit: voxel_sizes
+    
+    script:
+    """
+    # Get Voxel Sizes Of The File
+    cp ${projectDir}/bin/get_voxel_sizes_bigstitcher_dataset.groovy .
+    
+    echo "Getting voxel sizes of image: ${image_file}"
+    
+    # Log parameters
+    echo "Getting voxel sizes of image: ${image_file}" >> get_voxel_sizes.txt
+    
+    OUTPUT_DIR_PATH="\$(pwd)/"
+    
+    # Build the parameter string with proper quoting
+    PARAMS="image_file_path=\\\""${image_file}"\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\""
+    
+    echo "Parameters: \${PARAMS}" >> get_voxel_sizes.txt
+    
+    # Run Fiji with voxel sizes script
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+        --run get_voxel_sizes_bigstitcher_dataset.groovy \\
+        "\${PARAMS}"
+    
+    # Verify the voxel_sizes.txt file was created and parse it
+    if [ -f "voxel_sizes.txt" ]; then
+        echo "Successfully produced voxel size text file" >> get_voxel_sizes.txt
+        
+        # Read and export the voxel sizes
+        export VOXEL_X=\$(head -n 1 voxel_sizes.txt | tr -d '[:space:]')
+        export VOXEL_Y=\$(head -n 2 voxel_sizes.txt | tail -n 1 | tr -d '[:space:]')
+        export VOXEL_Z=\$(head -n 3 voxel_sizes.txt | tail -n 1 | tr -d '[:space:]')
+        
+        echo "Voxel sizes: X=\${VOXEL_X}, Y=\${VOXEL_Y}, Z=\${VOXEL_Z}" >> get_voxel_sizes.txt
+    else
+        echo "ERROR: Could not get voxel sizes - voxel_sizes.txt not found"
+        echo "ERROR: Voxel sizes fetching failed at: \$(date)" >> get_voxel_sizes.txt
+        exit 1
+    fi
+    """
+}
