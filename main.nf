@@ -56,9 +56,9 @@ workflow {
     icp_refined = icpRefinementWithBigstitcher(tile_aligned.tile_aligned_xml, fiji_path, params.bigstitcher)
 
     // ASR Reorientation
-    reoriented_to_asr = reorientToASRWithBigstitcher(icp_refined.icp_refined_xml, fiji_path, params.bigstitcher)
+    //reoriented_to_asr = reorientToASRWithBigstitcher(icp_refined.icp_refined_xml, fiji_path, params.bigstitcher)
 
-    fused_image = fuseBigStitcherDataset(reoriented_to_asr.asr_xml, fiji_path, params.bigstitcher)
+    fused_image = fuseBigStitcherDataset(icp_refined.icp_refined_xml/*reoriented_to_asr.asr_xml*/, fiji_path, params.bigstitcher)
 
     // Get voxel sizes
     voxel_results = getVoxelSizes(fused_image.fused_image, fiji_path)

@@ -53,8 +53,6 @@ class ASR {
     ]
 }
 
-
-// fixMirroring method converted to Groovy
 String fixMirroring(String raw_orientation, String xml_file) {
     String orientation = raw_orientation.toLowerCase()
     Map<String, String> mirrorOrientations = [
@@ -75,33 +73,35 @@ String fixMirroring(String raw_orientation, String xml_file) {
     if (mirrorOrientations.containsKey(orientation)) {
         SpimData dataset = new XmlIoSpimData().load(xml_file)
 
+        String mirrorTransformName = "Mirror Transform"
+
         List<ViewTransform> allTransforms = dataset.getViewRegistrations().getViewRegistrationsOrdered().get(0).getTransformList()
 
         Optional<ViewTransform> flipTransform = allTransforms.stream().filter { viewTransform -> 
-            viewTransform.hasName() && viewTransform.getName().contains("Manually defined transformation (Rigid/Affine by matrix)")
+            viewTransform.hasName() && viewTransform.getName().contains(mirrorTransformName)
         }.findFirst()
 
-        //def flipTansform = xml.ViewRegistrations.ViewRegistration[0].ViewTransform.find{ it.Name.text().contains("Manually defined transformation (Rigid/Affine by matrix)") }
-
         println("INFO: Flipping along X axis")
-
+        
         if (!flipTransform.isPresent()) {
-            ij.IJ.run("Apply Transformations", "select=["+xml_file+"] " +
-                "apply_to_angle=[All angles] " +
-                "apply_to_channel=[All channels] " +
-                "apply_to_illumination=[All illuminations] " +
-                "apply_to_tile=[All tiles] " +
-                "apply_to_timepoint=[All Timepoints] " +
-                "transformation=Rigid " +
-                "apply=[Current view transformations (appends to current transforms)] " +
-                "define=Matrix " +
-                "same_transformation_for_all_channels " +
-                "same_transformation_for_all_tiles " +
-                "timepoint_0_all_channels_illumination_0_angle_0=[-1.0, 0.0, 0.0, 0.0, " +
-                "0.0, 1.0, 0.0, 0.0, " +
-                "0.0, 0.0, 1.0, 0.0]")
 
-            println("INFO: Flipping along X axis DONE")
+            def transform = new AffineTransform3D()
+            transform.set(
+                -1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0
+            )
+
+            dataset.getViewRegistrations()
+                   .getViewRegistrations()
+                   .values()
+                   .forEach{viewRegistration -> 
+                                viewRegistration.preconcatenateTransform(new ViewTransformAffine(mirrorTransformName, transform))
+                            }
+
+            new XmlIoSpimData().save((SpimData) dataset, xml_file);
+
+
         } else {
             println("INFO: Flipping along X axis not necessary, already in XML metadata")
         }
@@ -127,34 +127,24 @@ if (reorient_to_asr) {
 
     // If the transformation exists, then use it
     if (ASR.t.containsKey(originalOrientation)) {
-        ASR.t[originalOrientation].each { p ->
-            // Build the command
-            String command = "select=[" + xml_file + "] " +
-                "apply_to_angle=[All angles] " +
-                "apply_to_channel=[All channels] " +
-                "apply_to_illumination=[All illuminations] " +
-                "apply_to_tile=[All tiles] " +
-                "apply_to_timepoint=[All Timepoints] " +
-                "transformation=Rigid " +
-                "apply=[Current view transformations (appends to current transforms)] " +
-                "define=[Rotation around axis] " +
-                "same_transformation_for_all_channels " +
-                "same_transformation_for_all_tiles "
+        
+        SpimData dataset = new XmlIoSpimData().load(xml_file)
+        ASR.t[originalOrientation].eachWithIndex { p, idx ->
+            
+            println("Apply transform: "+p)
+            def matrix = getTransform(p)
 
-            // UNTESTED WITH MULTIPLE CHANNELS!!
-            if (nChannels == 1) {
-                command += "axis_timepoint_0_channel_0_illumination_0_angle_0=${p.axis} " +
-                    "rotation_timepoint_0_channel_0_illumination_0_angle_0=${p.angle}"
-            } else {
-                command += "axis_timepoint_0_all_channels_illumination_0_angle_0=${p.axis} " +
-                    "rotation_timepoint_0_all_channels_illumination_0_angle_0=${p.angle}"
-            }
+            println("Matrix: "+matrix)
+            dataset.getViewRegistrations()
+                   .getViewRegistrations()
+                   .values()
+                   .forEach{viewRegistration -> 
+                                viewRegistration.preconcatenateTransform(new ViewTransformAffine("ASR Transform "+idx, matrix))
+                            }
 
-            ij.IJ.log(command)
-
-            // Run it
-            ij.IJ.run("Apply Transformations", command)
         }
+        new XmlIoSpimData().save((SpimData) dataset, xml_file);
+
     } else {
         // Otherwise inform that it's not going to be done and mention which transforms are available
         println("We do not have a transformation from ${originalOrientation} to 'ASR' Skipping reorientation step")
@@ -164,8 +154,57 @@ if (reorient_to_asr) {
 
 }
 
+static AffineTransform3D getTransform(rotation) {
+    println(rotation)
+    
+    // Start with identity matrix
+    def transform = new AffineTransform3D()
+    
+    // Apply rotations in sequence
+    def axis = rotation.axis
+    def angleDegrees = rotation.angle as double
+    println(axis)
+    println(angleDegrees)
+    def angleRadians = Math.toRadians(angleDegrees)
+    println(angleRadians)
+    def rotationTransform = new AffineTransform3D()
+    println(rotationTransform)
+    
+    switch (axis) {
+        case "x-axis":
+            rotationTransform.set(
+                1.0, 0.0, 0.0, 0.0,
+                0.0, Math.cos(angleRadians), -Math.sin(angleRadians), 0.0,
+                0.0, Math.sin(angleRadians), Math.cos(angleRadians), 0.0
+            )
+            break
+        case "y-axis":
+            rotationTransform.set(
+                Math.cos(angleRadians), 0.0, Math.sin(angleRadians), 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                -Math.sin(angleRadians), 0.0, Math.cos(angleRadians), 0.0
+            )
+            break
+        case "z-axis":
+            rotationTransform.set(
+                Math.cos(angleRadians), -Math.sin(angleRadians), 0.0, 0.0,
+                Math.sin(angleRadians), Math.cos(angleRadians), 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0
+            )
+            break
+        default:
+            throw new IllegalArgumentException("Unknown axis: ${axis}")
+    }
+    
+    // Concatenate the rotation (multiply matrices)
+    return rotationTransform
+
+}
+
 
 import mpicbg.spim.data.SpimData
 import mpicbg.spim.data.SpimDataException
 import mpicbg.spim.data.XmlIoSpimData
 import mpicbg.spim.data.registration.ViewTransform
+import mpicbg.spim.data.registration.ViewTransformAffine;
+import net.imglib2.realtransform.AffineTransform3D

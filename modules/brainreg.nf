@@ -50,8 +50,8 @@ process brainregRunRegistration {
     tuple path(fused_image), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z)
     val config
     
-    output:
-    path "brainreg_log.txt"
+    // output:
+    // path "brainreg_log.txt"
     
     script:
     params_brainreg = config.brainreg
