@@ -189,13 +189,13 @@ process fuseBigStitcherDataset {
     OUTPUT_DIR_PATH="\$(pwd)/"
     
     # Build the parameter string with proper quoting
-    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\""
+    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\",downsample=\\\"${fuse.downsample}\\\""
     
     # Run Fiji with Fusion script
     \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
         --run fuse_bigstitcher_dataset.groovy \\
         "\${PARAMS}"
-        
+
     mv "${xml_file.baseName}.ome.tiff" "${xml_file.baseName}.tiff"    
     """
 

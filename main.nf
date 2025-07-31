@@ -55,10 +55,17 @@ workflow {
     // ICP refinement
     icp_refined = icpRefinementWithBigstitcher(tile_aligned.tile_aligned_xml, fiji_path, params.bigstitcher)
 
-    // ASR Reorientation
-    //reoriented_to_asr = reorientToASRWithBigstitcher(icp_refined.icp_refined_xml, fiji_path, params.bigstitcher)
+    def xml_out
 
-    fused_image = fuseBigStitcherDataset(icp_refined.icp_refined_xml/*reoriented_to_asr.asr_xml*/, fiji_path, params.bigstitcher)
+    // Optional ASR Reorientation
+    if (params.bigstitcher.reorientation.reorient_to_asr) {
+        reoriented_to_asr = reorientToASRWithBigstitcher(icp_refined.icp_refined_xml, fiji_path, params.bigstitcher)
+        xml_out = reoriented_to_asr.asr_xml
+    } else {
+        xml_out = icp_refined.icp_refined_xml
+    }
+
+    fused_image = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
 
     // Get voxel sizes
     voxel_results = getVoxelSizes(fused_image.fused_image, fiji_path)

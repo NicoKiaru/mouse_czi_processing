@@ -2,6 +2,7 @@
 #@String xml_file
 #@String output_directory
 #@String fusion_method
+#@double downsample
 
 cs.run(
         FuseBigStitcherDatasetIntoOMETiffCommand.class, true,
@@ -17,6 +18,9 @@ cs.run(
         "split_frames", false,
         "override_z_ratio", false,
         "use_interpolation", false,
+        "x_downsample", downsample,
+        "y_downsample", downsample,
+        "z_downsample", downsample,
         "fusion_method", fusion_method
     ).get();
 
