@@ -8,8 +8,9 @@ process brainregEnvInstall {
     
     script:
     """
-    # Install to a specific directory
-    pip install --target brainreg_env brainreg==1.0.13 tables==3.10.2
+    # Ensure pip is available
+    python3 -m ensurepip --upgrade
+    python3 -m pip install --target brainreg_env brainreg==1.0.13 tables==3.10.2 imagecodecs
     echo "Installation complete"
     """
 }
@@ -41,17 +42,63 @@ process brainregTestEnv {
     """
 }
 
+process organizeChannelsForBrainreg {
+    tag "organize ${base_name}"
+    publishDir "${params.outdir}/brainreg_ready", mode: 'copy'
+    
+    input:
+    tuple val(base_name), path(channel_files)
+    val registration_channel
+    
+    output:
+    tuple path("primary_channel.tiff"), path("additional_channels.txt"), val(base_name), emit: organized_channels
+    
+    script:
+    """
+    # Sort channel files to ensure consistent ordering
+    SORTED_FILES=\$(ls ${channel_files} | sort -V)
+    echo "Found channels:"
+    echo "\${SORTED_FILES}"
+    
+    # Count channels
+    CHANNEL_COUNT=\$(echo "\${SORTED_FILES}" | wc -l)
+    echo "Total channels: \${CHANNEL_COUNT}"
+    
+    # Extract the primary channel (0-indexed)
+    PRIMARY_CHANNEL=\$(echo "\${SORTED_FILES}" | sed -n "\$((${registration_channel} + 1))p")
+    echo "Primary channel for registration: \${PRIMARY_CHANNEL}"
+    
+    # Copy primary channel
+    cp "\${PRIMARY_CHANNEL}" primary_channel.tiff
+    
+    # Create list of additional channels (all except primary)
+    > additional_channels.txt
+    CHANNEL_INDEX=0
+    for CHANNEL in \${SORTED_FILES}; do
+        if [ \${CHANNEL_INDEX} -ne ${registration_channel} ]; then
+            # Write full path to the additional channels file
+            echo "\$(pwd)/\${CHANNEL}" >> additional_channels.txt
+        fi
+        CHANNEL_INDEX=\$((CHANNEL_INDEX + 1))
+    done
+    
+    echo "Additional channels:"
+    cat additional_channels.txt
+    """
+}
 process brainregRunRegistration {
     container 'python:3.11'
+    publishDir "${params.outdir}/brainreg_output", mode: 'copy'
     
     input:
     path brainreg_env
     path atlas_cache
-    tuple path(fused_image), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z)
+    tuple path(primary_channel), path(additional_channels_file), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z)
     val config
     
-    // output:
-    // path "brainreg_log.txt"
+    output:
+    path "brainreg_output/*", emit: registered_brain
+    path "brainreg_log.txt", emit: log
     
     script:
     params_brainreg = config.brainreg
@@ -62,12 +109,16 @@ process brainregRunRegistration {
     } else {
         orientation = "asr"
     }
-
-
+    
+    // Read additional channels from file
+    def additional_channels_args = ""
+    if (additional_channels_file.name != "NO_FILE") {
+        additional_channels_args = "--additional \$(cat ${additional_channels_file} | tr '\\n' ' ')"
+    }
+    
     """
     # Add the shared directory to Python path
     export PYTHONPATH=\${PWD}/${brainreg_env}:\${PYTHONPATH:-}
-    # Add the bin directory to PATH (where executables are installed)
     export PATH=\${PWD}/${brainreg_env}/bin:\${PATH}
 
     # Use pre-downloaded atlas cache
@@ -75,10 +126,20 @@ process brainregRunRegistration {
     export XDG_CONFIG_HOME=\${PWD}/${atlas_cache}
     export HOME=\${PWD}
     
-    echo ${params_brainreg.atlas}
-
-    # Run brainreg with all parameters
-    brainreg \\
+    echo "Processing image: ${image_name}"
+    echo "Primary channel: ${primary_channel}"
+    echo "Additional channels:"
+    if [ -f "${additional_channels_file}" ]; then
+        cat "${additional_channels_file}"
+    fi
+    
+    # Create output directory
+    mkdir -p brainreg_output
+    
+    # Build the brainreg command
+    BRAINREG_CMD="brainreg \\
+        ${primary_channel} \\
+        brainreg_output \\
         --atlas ${params_brainreg.atlas} \\
         --backend ${params_brainreg.backend} \\
         --affine-n-steps ${params_brainreg.affine_n_steps} \\
@@ -98,10 +159,22 @@ process brainregRunRegistration {
         ${params_brainreg.save_original_orientation ? '--save-original-orientation' : ''} \\
         --brain_geometry ${params_brainreg.brain_geometry} \\
         ${params_brainreg.sort_input_file ? '--sort-input-file' : ''} \\
-        --pre-processing ${params_brainreg.pre_processing} \\
-        ${fused_image} . 
+        --pre-processing ${params_brainreg.pre_processing}"
     
-    echo "Brainreg processing completed successfully"
+    # Add additional channels if they exist
+    if [ -f "${additional_channels_file}" ] && [ -s "${additional_channels_file}" ]; then
+        echo "Adding additional channels to brainreg command"
+        BRAINREG_CMD="\${BRAINREG_CMD} ${additional_channels_args}"
+    fi
+    
+    echo "Full brainreg command:"
+    echo "\${BRAINREG_CMD}"
+    
+    # Run brainreg
+    eval "\${BRAINREG_CMD}" 2>&1 | tee brainreg_log.txt
+    
+    echo "Brainreg processing completed"
+    ls -la brainreg_output/
     """
 }
 

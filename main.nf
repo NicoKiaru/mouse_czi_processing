@@ -15,7 +15,8 @@ include {
 include { brainregEnvInstall; 
           brainregTestEnv;
           brainregRunRegistration;
-          downloadAtlas } from './modules/brainreg'
+          downloadAtlas;
+          organizeChannelsForBrainreg } from './modules/brainreg'
 
 workflow {
 
@@ -65,26 +66,61 @@ workflow {
         xml_out = icp_refined.icp_refined_xml
     }
 
-    fused_image = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
+
+    // Fuse image - always splits by channel
+    fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
+    
+    // Get voxel sizes from the first channel file
+    first_channel = fused_images.fused_images
+        .flatten()
+        .first()
+    
+    voxel_results = getVoxelSizes(first_channel, fiji_path)
+    
+    // Organize channels for brainreg
+    organized_channels = organizeChannelsForBrainreg(
+        fused_images.named_fused_images,
+        params.brainreg.channel_used_for_registration
+    )
+    
+    // Combine with voxel sizes for brainreg
+    brainreg_input = organized_channels.organized_channels
+        .combine(voxel_results.voxel_sizes.map { name, x, y, z -> tuple(x, y, z) })
+    
+    // View what will be processed
+    brainreg_input.view { primary, additional, name, x, y, z -> 
+        "Ready for brainreg: ${name} using primary channel with voxel sizes: X=${x}μm, Y=${y}μm, Z=${z}μm"
+    }
+
+    brainreg_install = brainregEnvInstall()
+    atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
+    
+    // Run brainreg with primary and additional channels
+    brainregRunRegistration(brainreg_install,
+                           atlas_cache,
+                           brainreg_input,
+                           params)
+
+    //fused_image = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
 
     // Get voxel sizes
-    voxel_results = getVoxelSizes(fused_image.fused_image, fiji_path)
+    /*voxel_results = getVoxelSizes(fused_image.fused_image, fiji_path)
 
     voxel_results.voxel_sizes.view { image_name, x, y, z ->
         "Image: ${image_name}, Voxel sizes: X=${x}, Y=${y}, Z=${z}"
     }
 
-    brainreg_install = brainregEnvInstall()
+    brainreg_install = brainregEnvInstall()*/
 
     //brainregTestEnv(brainregEnvInstall.out).view { "Test results: ${it.text}" }
 
     // Combine the fused image with voxel sizes
-    combined_data = fused_image.fused_image.combine(voxel_results.voxel_sizes)
+    /*combined_data = fused_image.fused_image.combine(voxel_results.voxel_sizes)
 
     atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
 
     brainregRunRegistration(brainreg_install,
                             atlas_cache,
                             combined_data,
-                            params)
+                            params)*/
 }

@@ -166,10 +166,9 @@ process reorientToASRWithBigstitcher {
         "\${PARAMS}"
     """
 }
-
 process fuseBigStitcherDataset {
     tag "fuse dataset ${xml_file.baseName}"
-    // publishDir "${params.outdir}/icp_refinement", mode: 'copy'
+    publishDir "${params.outdir}/fused_channels", mode: 'copy', pattern: "*.tiff"
     
     input:
     path xml_file
@@ -177,31 +176,45 @@ process fuseBigStitcherDataset {
     val config
     
     output:
-    path "${xml_file.baseName}.tiff", emit: fused_image
-
+    path "*.tiff", emit: fused_images
+    tuple val("${xml_file.baseName}"), path("*.tiff"), emit: named_fused_images
+    
     script:
     def fuse = config.fusion_config
+    def downsample = fuse.downsample ?: 1
     
     """
-    # Fuse dataset into an ome.tiff file
+    # Fuse dataset into ome.tiff file(s) - always split by channel
     cp ${projectDir}/bin/fuse_bigstitcher_dataset.groovy .
     
     OUTPUT_DIR_PATH="\$(pwd)/"
     
     # Build the parameter string with proper quoting
-    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\",downsample=\\\"${fuse.downsample}\\\""
+    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\",downsample=${downsample}"
+    
+    echo "Running fusion with parameters: \${PARAMS}"
+    echo "Channels will be split into separate files"
     
     # Run Fiji with Fusion script
     \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
         --run fuse_bigstitcher_dataset.groovy \\
         "\${PARAMS}"
-
-    mv "${xml_file.baseName}.ome.tiff" "${xml_file.baseName}.tiff"    
-    """
-
     
+    # Rename files to remove .ome extension
+    echo "Renaming channel files..."
+    for f in ${xml_file.baseName}_C*.ome.tiff; do
+        if [ -f "\$f" ]; then
+            newname=\${f%.ome.tiff}.tiff
+            mv "\$f" "\$newname"
+            echo "Renamed \$f to \$newname"
+        fi
+    done
+    
+    # List output files for verification
+    echo "Output files:"
+    ls -la *.tiff
+    """
 }
-
 
 
 process getVoxelSizes {

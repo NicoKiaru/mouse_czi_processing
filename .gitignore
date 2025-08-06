@@ -24,6 +24,7 @@ samples/
 *.czi
 *.tif
 *.tiff
+null/
 
 # Fiji installations and caches
 fiji_*/

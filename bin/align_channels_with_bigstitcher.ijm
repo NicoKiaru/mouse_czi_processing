@@ -59,3 +59,5 @@ run("Optimize globally and apply shifts ...",
 
 print("Channel alignment completed successfully!");
 print("Processed XML file: " + xml_file);
+
+eval("script", "System.exit(0);"); // BigStitcher bug -> force quit

@@ -14,7 +14,7 @@ cs.run(
         "n_resolution_levels", 1,
         "use_lzw_compression", false,
         "split_slices", false,
-        "split_channels", false,
+        "split_channels", true,
         "split_frames", false,
         "override_z_ratio", false,
         "use_interpolation", false,
