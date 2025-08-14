@@ -2,6 +2,7 @@
 
 process brainregEnvInstall {
     container 'python:3.11'
+    cache 'lenient'
     
     output:
     path "brainreg_env"
