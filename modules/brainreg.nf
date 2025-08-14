@@ -3,6 +3,7 @@
 process brainregEnvInstall {
     container 'python:3.11'
     cache 'lenient'
+    storeDir params.env_cache_dir
     
     output:
     path "brainreg_env"
@@ -182,6 +183,7 @@ process brainregRunRegistration {
 process downloadAtlas {
     container 'python:3.11'
     publishDir "${workflow.projectDir}/atlas_cache", mode: 'copy'
+    storeDir params.atlas_cache_dir
     
     input:
     path brainreg_env
