@@ -63,36 +63,42 @@ process alignChannelsWithBigstitcher {
 
 process alignTilesWithBigstitcher {
     tag "align tiles ${xml_file.baseName}"
-    
+   
     input:
     path xml_file
     env FIJI_PATH
     val config
-    
+   
     output:
     path "${xml_file.baseName}_tile_aligned.xml", emit: tile_aligned_xml
-    
+   
     script:
     def ta = config.tile_alignment
     def psd = ta.pairwise_shifts_downsamples
     
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
+   
     """
     # Copy the tile alignment script to the work directory
     cp ${projectDir}/bin/align_tiles_with_bigstitcher.ijm .
-    
+   
     # Create a copy for tile alignment processing
     cp "${xml_file}" "${xml_file.baseName}_tile_aligned.xml"
-    
+   
     # Get the full path
     FULL_XML_PATH="\$(pwd)/${xml_file.baseName}_tile_aligned.xml"
     echo "Full XML path: \${FULL_XML_PATH}" >> tile_alignment_log.txt
-    
+   
     # Build the parameter string with proper quoting
     PARAMS="xml_file=\\\""\${FULL_XML_PATH}"\\\",use_channel=${ta.use_channel},pairwise_shifts_downsamples_x=${psd.x},pairwise_shifts_downsamples_y=${psd.y},pairwise_shifts_downsamples_z=${psd.z},filter_min_r=${ta.filter_min_r}"
     echo "Parameters: \${PARAMS}" >> tile_alignment_log.txt
     
+    # Show memory allocation
+    echo "Fiji memory setting: ${fiji_memory}" >> tile_alignment_log.txt
+   
     # Run Fiji with tile alignment script
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run align_tiles_with_bigstitcher.ijm \\
         "\${PARAMS}"
     """
