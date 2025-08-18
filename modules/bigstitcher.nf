@@ -9,11 +9,15 @@ process makeCziDatasetForBigstitcher {
     path "${image.baseName}_bigstitcher.xml", emit: xml_file
     
     script:
+
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
+
     """
     # Copy the groovy script to the work directory
     cp ${projectDir}/bin/make_czi_dataset_for_bigstitcher.ijm .
 
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run make_czi_dataset_for_bigstitcher.ijm \\
         'czi_file="${image}",xml_out="${image.baseName}_bigstitcher.xml"'
     """
@@ -34,6 +38,9 @@ process alignChannelsWithBigstitcher {
     script:
     def ca = config.channel_alignment
     def psd = ca.pairwise_shifts_downsamples
+
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
     
     """
     # Copy the groovy script to the work directory
@@ -54,7 +61,7 @@ process alignChannelsWithBigstitcher {
     echo "Parameters: \${PARAMS}"
 
     # Run Fiji
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run align_channels_with_bigstitcher.ijm \\
         "\${PARAMS}"
 
@@ -118,6 +125,9 @@ process icpRefinementWithBigstitcher {
     
     script:
     def icp = config.icp_refinement
+
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
     
     """
     # Copy the ICP refinement script to the work directory
@@ -133,7 +143,7 @@ process icpRefinementWithBigstitcher {
     PARAMS="xml_file=\\\""\${FULL_XML_PATH}"\\\",icp_refinement_type=\\\"${icp.icp_refinement_type}\\\",downsampling=\\\"${icp.downsampling}\\\",interest=\\\"${icp.interest}\\\",icp_max_error=\\\"${icp.icp_max_error}\\\""
     
     # Run Fiji with ICP refinement script
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run icp_refinement_with_bigstitcher.ijm \\
         "\${PARAMS}"
     """
@@ -153,6 +163,9 @@ process reorientToASRWithBigstitcher {
     
     script:
     def reorient = config.reorientation
+
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
     
     """
     # Copy the ASR reorientation script to the work directory
@@ -167,7 +180,7 @@ process reorientToASRWithBigstitcher {
     PARAMS="xml_file=\\\""\${FULL_XML_PATH}"\\\",raw_orientation=\\\"${reorient.raw_orientation}\\\",reorient_to_asr=${reorient.reorient_to_asr}"
     
     # Run Fiji with ASR reorientation script
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run reorient_to_asr_with_bigstitcher.groovy \\
         "\${PARAMS}"
     """
@@ -188,6 +201,9 @@ process fuseBigStitcherDataset {
     script:
     def fuse = config.fusion_config
     def downsample = fuse.downsample ?: 1
+
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
     
     """
     # Fuse dataset into ome.tiff file(s) - always split by channel
@@ -202,7 +218,7 @@ process fuseBigStitcherDataset {
     echo "Channels will be split into separate files"
     
     # Run Fiji with Fusion script
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run fuse_bigstitcher_dataset.groovy \\
         "\${PARAMS}"
     
@@ -235,6 +251,8 @@ process getVoxelSizes {
     tuple val("${image_file.baseName}"), env(VOXEL_X), env(VOXEL_Y), env(VOXEL_Z), emit: voxel_sizes
     
     script:
+    // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
+    def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
     """
     # Get Voxel Sizes Of The File
     cp ${projectDir}/bin/get_voxel_sizes_bigstitcher_dataset.groovy .
@@ -247,7 +265,7 @@ process getVoxelSizes {
     echo "Parameters: \${PARAMS}" >> get_voxel_sizes.txt
     
     # Run Fiji with voxel sizes script
-    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console \\
+    \${FIJI_PATH}/Fiji.app/ImageJ-linux64 --ij2 --headless --console ${fiji_memory} \\
         --run get_voxel_sizes_bigstitcher_dataset.groovy \\
         "\${PARAMS}"
     
