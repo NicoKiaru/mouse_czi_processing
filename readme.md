@@ -19,9 +19,9 @@ flowchart TB
     v23([fuseBigStitcherDataset])
     v26([getVoxelSizes])
     v29([organizeChannelsForBrainreg])
-    v32([brainregEnvInstall])
-    v34([downloadAtlas])
-    v36([brainregRunRegistration])
+    v37([brainregEnvInstall])
+    v39([downloadAtlas])
+    v41([brainregRunRegistration])
     v2 --> v10
     v9 --> v10
     v2 --> v12
@@ -43,12 +43,13 @@ flowchart TB
     v23 --> v26
     v23 --> v29
     v28 --> v29
-    v32 --> v34
-    v28 --> v34
-    v32 --> v36
-    v34 --> v36
-    v26 --> v36
-    v29 --> v36
+    v37 --> v39
+    v28 --> v39
+    v37 --> v41
+    v39 --> v41
+    v26 --> v41
+    v28 --> v41
+    v29 --> v41
     end
 ```
 
