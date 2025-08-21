@@ -90,18 +90,23 @@ process organizeChannelsForBrainreg {
 }
 process brainregRunRegistration {
     container 'python:3.11'
-    publishDir "${params.outdir}/brainreg_output", mode: 'copy'
+    // Updated tag to include parameter combination info
+    tag "brainreg_${image_name}_bending${param_combo.bending_energy_weight}_grid${param_combo.grid_spacing}_sigma${param_combo.smoothing_sigma_floating}"
+    
+    // Updated publishDir to organize outputs by parameter combination
+    publishDir "${params.outdir}/brainreg_output/${image_name}_bending${param_combo.bending_energy_weight}_grid${param_combo.grid_spacing}_sigma${param_combo.smoothing_sigma_floating}", mode: 'copy'
     
     input:
     path brainreg_env
     path atlas_cache
-    tuple path(primary_channel), path(additional_channels_file), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z)
+    tuple path(primary_channel), path(additional_channels_file), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z), val(param_combo)
     val config
     
     output:
     path "brainreg_output/*", emit: registered_brain
     path "brainreg_log.txt", emit: log
-    
+    tuple val(image_name), val(param_combo), path("brainreg_output/*"), emit: named_results
+
     script:
     params_brainreg = config.brainreg
     
@@ -129,6 +134,10 @@ process brainregRunRegistration {
     export HOME=\${PWD}
     
     echo "Processing image: ${image_name}"
+    echo "Parameter combination:"
+    echo "  bending_energy_weight: ${param_combo.bending_energy_weight}"
+    echo "  grid_spacing: ${param_combo.grid_spacing}"
+    echo "  smoothing_sigma_floating: ${param_combo.smoothing_sigma_floating}"
     echo "Primary channel: ${primary_channel}"
     echo "Additional channels:"
     if [ -f "${additional_channels_file}" ]; then
@@ -148,10 +157,10 @@ process brainregRunRegistration {
         --affine-use-n-steps ${params_brainreg.affine_use_n_steps} \\
         --freeform-n-steps ${params_brainreg.freeform_n_steps} \\
         --freeform-use-n-steps ${params_brainreg.freeform_use_n_steps} \\
-        --bending-energy-weight ${params_brainreg.bending_energy_weight} \\
-        --grid-spacing ${params_brainreg.grid_spacing} \\
+        --bending-energy-weight ${param_combo.bending_energy_weight} \\
+        --grid-spacing ${param_combo.grid_spacing} \\
         --smoothing-sigma-reference ${params_brainreg.smoothing_sigma_reference} \\
-        --smoothing-sigma-floating ${params_brainreg.smoothing_sigma_floating} \\
+        --smoothing-sigma-floating ${param_combo.smoothing_sigma_floating} \\
         --histogram-n-bins-floating ${params_brainreg.histogram_n_bins_floating} \\
         --histogram-n-bins-reference ${params_brainreg.histogram_n_bins_reference} \\
         -v ${voxel_z} ${voxel_y} ${voxel_x} \\
@@ -175,7 +184,10 @@ process brainregRunRegistration {
     # Run brainreg
     eval "\${BRAINREG_CMD}" 2>&1 | tee brainreg_log.txt
     
-    echo "Brainreg processing completed"
+    echo "Brainreg processing completed for parameter combination:"
+    echo "  bending_energy_weight: ${param_combo.bending_energy_weight}"
+    echo "  grid_spacing: ${param_combo.grid_spacing}" 
+    echo "  smoothing_sigma_floating: ${param_combo.smoothing_sigma_floating}"
     ls -la brainreg_output/
     """
 }

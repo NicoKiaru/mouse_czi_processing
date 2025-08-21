@@ -1,0 +1,12 @@
+task_id	hash	native_id	name	status	exit	submit	duration	realtime	%cpu	peak_rss	peak_vmem	rchar	wchar
+1	53/bd7a60	22291	stageFilesRSync (stageRSync_AB116.czi)	CACHED	0	2025-08-21 15:31:07.290	77ms	41ms	-	-	-	-	-
+4	9e/a8da83	22375	makeCziDatasetForBigstitcher (make bigstitcher xml from czi AB116)	CACHED	0	2025-08-21 15:31:07.405	23.4s	23.4s	-	-	-	-	-
+5	2b/5a40df	22681	alignChannelsWithBigstitcher (align channels AB116_bigstitcher)	CACHED	0	2025-08-21 15:31:30.842	11m 6s	11m 6s	-	-	-	-	-
+6	bf/12321a	27767	alignTilesWithBigstitcher (align tiles AB116_bigstitcher_aligned)	CACHED	0	2025-08-21 15:42:37.098	30m 33s	30m 33s	-	-	-	-	-
+7	5a/454986	41133	icpRefinementWithBigstitcher (icp refinement AB116_bigstitcher_aligned_tile_aligned)	CACHED	0	2025-08-21 16:13:10.396	18m 3s	18m 3s	-	-	-	-	-
+8	92/13779a	50816	reorientToASRWithBigstitcher (asr reorientation AB116_bigstitcher_aligned_tile_aligned_icp_refined)	CACHED	0	2025-08-21 16:31:13.914	10.4s	10.3s	-	-	-	-	-
+9	0d/976084	50988	fuseBigStitcherDataset (fuse dataset AB116_bigstitcher_aligned_tile_aligned_icp_refined_asr)	CACHED	0	2025-08-21 16:31:24.448	2m 41s	2m 41s	-	-	-	-	-
+10	a0/3a29ba	52295	organizeChannelsForBrainreg (organize AB116_bigstitcher_aligned_tile_aligned_icp_refined_asr)	CACHED	0	2025-08-21 16:34:05.613	55ms	44ms	-	-	-	-	-
+11	ce/308ec5	52319	getVoxelSizes (get voxel sizes AB116_bigstitcher_aligned_tile_aligned_icp_refined_asr_C0)	CACHED	0	2025-08-21 16:34:05.660	8.8s	8.8s	-	-	-	-	-
+13	7b/8e1aa9	68671	brainregRunRegistration (brainreg_AB116_bigstitcher_aligned_tile_aligned_icp_refined_asr_bending0.8_grid4_sigma-1)	COMPLETED	0	2025-08-21 16:41:09.896	6m 56s	6m 55s	239.6%	4.3 GB	6.6 GB	3.2 GB	6.2 GB
+12	11/359972	68655	brainregRunRegistration (brainreg_AB116_bigstitcher_aligned_tile_aligned_icp_refined_asr_bending0.3_grid4_sigma-1)	COMPLETED	0	2025-08-21 16:41:09.876	7m 4s	7m 4s	205.1%	4.3 GB	6.8 GB	3.2 GB	6.2 GB

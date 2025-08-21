@@ -18,6 +18,11 @@ include { brainregEnvInstall;
           downloadAtlas;
           organizeChannelsForBrainreg } from './modules/brainreg'
 
+// Helper function to ensure parameter is a list
+def ensureList(param) {
+    return param instanceof List ? param : [param]
+}
+
 workflow {
 
     // Check if Fiji already exists, otherwise set it up
@@ -88,9 +93,35 @@ workflow {
         .combine(voxel_results.voxel_sizes.map { name, x, y, z -> tuple(x, y, z) })
     
     // View what will be processed
-    brainreg_input.view { primary, additional, name, x, y, z -> 
+
+    /*brainreg_input.view { primary, additional, name, x, y, z -> 
         "Ready for brainreg: ${name} using primary channel with voxel sizes: X=${x}μm, Y=${y}μm, Z=${z}μm"
+    }*/
+
+    // CREATE PARAMETER SWEEP COMBINATIONS using Nextflow channels
+    bending_energy_ch = Channel.fromList(ensureList(params.brainreg.bending_energy_weight))
+    grid_spacing_ch = Channel.fromList(ensureList(params.brainreg.grid_spacing))
+    smoothing_sigma_ch = Channel.fromList(ensureList(params.brainreg.smoothing_sigma_floating))
+    
+    // Combine all parameter channels to create all combinations NOTE: it's a nextflow channel, not an image channel!
+    param_combinations = bending_energy_ch
+        .combine(grid_spacing_ch)
+        .combine(smoothing_sigma_ch)
+        .map { bending, grid, sigma -> 
+            [
+                bending_energy_weight: bending,
+                grid_spacing: grid,
+                smoothing_sigma_floating: sigma
+            ]
+        }
+    
+    // Log the parameter combinations that will be tested
+    param_combinations.view { combo ->
+        "Parameter combination: bending_energy_weight=${combo.bending_energy_weight}, grid_spacing=${combo.grid_spacing}, smoothing_sigma_floating=${combo.smoothing_sigma_floating}"
     }
+    
+    // Cross brainreg input with parameter combinations
+    brainreg_sweep_input = brainreg_input.combine(param_combinations)
 
     brainreg_install = brainregEnvInstall()
     atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
@@ -98,29 +129,7 @@ workflow {
     // Run brainreg with primary and additional channels
     brainregRunRegistration(brainreg_install,
                            atlas_cache,
-                           brainreg_input,
+                           brainreg_sweep_input,
                            params)
 
-    //fused_image = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
-
-    // Get voxel sizes
-    /*voxel_results = getVoxelSizes(fused_image.fused_image, fiji_path)
-
-    voxel_results.voxel_sizes.view { image_name, x, y, z ->
-        "Image: ${image_name}, Voxel sizes: X=${x}, Y=${y}, Z=${z}"
-    }
-
-    brainreg_install = brainregEnvInstall()*/
-
-    //brainregTestEnv(brainregEnvInstall.out).view { "Test results: ${it.text}" }
-
-    // Combine the fused image with voxel sizes
-    /*combined_data = fused_image.fused_image.combine(voxel_results.voxel_sizes)
-
-    atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
-
-    brainregRunRegistration(brainreg_install,
-                            atlas_cache,
-                            combined_data,
-                            params)*/
 }
