@@ -10,7 +10,8 @@ include {
     icpRefinementWithBigstitcher; 
     reorientToASRWithBigstitcher; 
     fuseBigStitcherDataset;
-    getVoxelSizes; } from './modules/bigstitcher'
+    getVoxelSizes;
+    publishXmlToSource; } from './modules/bigstitcher'
 
 include { brainregEnvInstall; 
           brainregTestEnv;
@@ -44,7 +45,6 @@ workflow {
     } catch (Exception e) {
         error "ERROR: Invalid output directory path '${params.outdir}': ${e.message}"
     }
-    
 
     // Check if Fiji already exists, otherwise set it up
     if (file("${params.fiji_cache_dir}/fiji_installation").exists()) {
@@ -61,10 +61,9 @@ workflow {
         input_files = params.input.split(',').collect { it.trim() }
         images = Channel.fromList(input_files).map { file(it) }
     } else {
-        // Default: look for CZI files in current directory
-        images = Channel.fromPath("*.{czi,tif,tiff}", checkIfExists: false)
+        log.info "WARNING: no input file defined - running the pipeline will only install tools without using them"
     }
-    
+
     // Debug: show what files were found BEFORE processing
     images = images.view { "Found input file: $it" }
     
@@ -101,6 +100,23 @@ workflow {
         xml_out = icp_refined.icp_refined_xml
     }
 
+    // Pair XML files with their original input paths for publishing
+    // original_paths = images_with_paths.map { original_path, file_obj -> original_path }
+    
+    // Channel.fromList(input_files)
+
+    xml_with_original_paths = xml_out
+        .merge(Channel.fromList(input_files)) { xml_file, original_path ->
+            tuple(xml_file, file(original_path))
+        }
+    
+    // Debug: Show the pairing
+    xml_with_original_paths.view { xml_file, original_path ->
+        "Will publish ${xml_file.name} alongside ${original_path}"
+    }
+    
+    // Publish XML files to source locations
+    publishXmlToSource(xml_with_original_paths)
 
     // Fuse image - always splits by channel
     fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)

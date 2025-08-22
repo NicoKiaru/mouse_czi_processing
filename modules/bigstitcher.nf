@@ -286,3 +286,32 @@ process getVoxelSizes {
     fi
     """
 }
+
+process publishXmlToSource {
+    tag "publish xml for ${original_path.baseName}"
+    
+    input:
+    tuple path(xml_file), val(original_path)
+    
+    output:
+    path "published_xml_info.txt", emit: publish_log
+    
+    script:
+    """
+    # Get the directory of the original file
+    ORIGINAL_DIR="\$(dirname "${original_path}")"
+    
+    # Create the output XML filename based on the original file
+    XML_FILENAME="${original_path.baseName}_processed.xml"
+    
+    # Copy the XML file to the original directory
+    cp "${xml_file}" "\${ORIGINAL_DIR}/\${XML_FILENAME}"
+    
+    echo "Published XML file: \${ORIGINAL_DIR}/\${XML_FILENAME}" > published_xml_info.txt
+    echo "Source XML: ${xml_file}" >> published_xml_info.txt
+    echo "Original image: ${original_path}" >> published_xml_info.txt
+    echo "Timestamp: \$(date)" >> published_xml_info.txt
+    
+    echo "Successfully published XML to: \${ORIGINAL_DIR}/\${XML_FILENAME}"
+    """
+}

@@ -94,7 +94,7 @@ process brainregRunRegistration {
     tag "brainreg_${image_name}_bending${param_combo.bending_energy_weight}_grid${param_combo.grid_spacing}_sigma${param_combo.smoothing_sigma_floating}"
     
     // Updated publishDir to organize outputs by parameter combination
-    publishDir "${params.outdir}/brainreg_output/${image_name}_bending${param_combo.bending_energy_weight}_grid${param_combo.grid_spacing}_sigma${param_combo.smoothing_sigma_floating}", mode: 'copy'
+    // publishDir "${params.outdir}/brainreg_output/${image_name}_bending${param_combo.bending_energy_weight}_grid${param_combo.grid_spacing}_sigma${param_combo.smoothing_sigma_floating}", mode: 'copy'
     
     input:
     path brainreg_env
