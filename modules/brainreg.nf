@@ -46,7 +46,7 @@ process brainregTestEnv {
 
 process organizeChannelsForBrainreg {
     tag "organize ${base_name}"
-    publishDir "${params.outdir}/brainreg_ready", mode: 'copy'
+    // publishDir "${params.outdir}/brainreg_ready", mode: 'copy'
     
     input:
     tuple val(base_name), path(channel_files)

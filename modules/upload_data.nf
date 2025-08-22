@@ -36,7 +36,7 @@ process stageFilesRSync {
     tag "stageRSync_${file(input_file).name}"
     
     // Disable Nextflow's automatic staging
-    // stageInMode 'copy'
+    stageInMode 'copy'
     
     input:
     path input_file
