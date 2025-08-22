@@ -105,25 +105,44 @@ workflow {
     // Fuse image - always splits by channel
     fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
     
-    // Get voxel sizes from the first channel file
-    first_channel = fused_images.fused_images
-        .flatten()
-        .first()
+    // Process each image completely through the brainreg preparation pipeline
+    image_processing = fused_images.named_fused_images
+        .map { base_name, channel_files ->
+            // Get first channel for voxel size detection
+            def file_list = channel_files instanceof List ? channel_files : [channel_files]
+            def sorted_files = file_list.sort { it.name }
+            def first_channel = sorted_files[0]
+            
+            // Return tuple with all info needed for this image
+            return tuple(base_name, channel_files, first_channel)
+        }
     
-    voxel_results = getVoxelSizes(first_channel, fiji_path)
+    // Debug: Show what we're processing
+    image_processing.view { base_name, channel_files, first_channel ->
+        "Processing image: ${base_name} with ${channel_files.size()} channels, using ${first_channel.name} for voxel sizes"
+    }
     
-    // Organize channels for brainreg
+    // Get voxel sizes for each image
+    voxel_results = getVoxelSizes(
+        image_processing.map { base_name, channel_files, first_channel -> first_channel }, 
+        fiji_path
+    )
+    
+    // Organize channels for brainreg for each image
     organized_channels = organizeChannelsForBrainreg(
-        fused_images.named_fused_images,
+        image_processing.map { base_name, channel_files, first_channel -> tuple(base_name, channel_files) },
         params.brainreg.channel_used_for_registration
     )
     
-    // Combine with voxel sizes for brainreg
+    // Combine everything for brainreg input (same order guaranteed)
     brainreg_input = organized_channels.organized_channels
-        .combine(voxel_results.voxel_sizes.map { name, x, y, z -> tuple(x, y, z) })
+        .merge(voxel_results.voxel_sizes) { organized_tuple, voxel_tuple -> 
+            def (primary, additional, base_name) = organized_tuple
+            def (voxel_name, x, y, z) = voxel_tuple
+            return tuple(primary, additional, base_name, x, y, z)
+        }
     
-    // View what will be processed
-
+    // Debug: View what will be processed
     brainreg_input.view { primary, additional, name, x, y, z -> 
         "Ready for brainreg: ${name} using primary channel with voxel sizes: X=${x}μm, Y=${y}μm, Z=${z}μm"
     }

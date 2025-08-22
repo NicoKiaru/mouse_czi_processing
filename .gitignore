@@ -24,7 +24,7 @@ samples/
 *.czi
 *.tif
 *.tiff
-null/
+testoutdir/
 
 # Fiji installations and caches
 fiji_*/
