@@ -11,7 +11,8 @@ include {
     reorientToASRWithBigstitcher; 
     fuseBigStitcherDataset;
     getVoxelSizes;
-    publishXmlToSource; } from './modules/bigstitcher'
+    publishInitialXmlToSource;
+    publishStitchedXmlToSource; } from './modules/bigstitcher'
 
 include { brainregEnvInstall; 
           brainregTestEnv;
@@ -81,6 +82,19 @@ workflow {
     // Makes a bigstitcher xml compatible file from the czi file
     makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
+    xml_not_stitched_with_original_paths = makeCziDatasetForBigstitcher.out
+        .merge(Channel.fromList(input_files)) { xml_file, original_path ->
+            tuple(xml_file, file(original_path))
+        }
+    
+    // Debug: Show the pairing
+    xml_not_stitched_with_original_paths.view { xml_file, original_path ->
+        "Will publish ${xml_file.name} alongside ${original_path}"
+    }
+    
+    // Publish XML files to source locations
+    publishInitialXmlToSource(xml_not_stitched_with_original_paths)
+
     // Channel alignment
     channel_aligned = alignChannelsWithBigstitcher(makeCziDatasetForBigstitcher.out, fiji_path, params.bigstitcher)
 
@@ -116,7 +130,7 @@ workflow {
     }
     
     // Publish XML files to source locations
-    publishXmlToSource(xml_with_original_paths)
+    publishStitchedXmlToSource(xml_with_original_paths)
 
     // Fuse image - always splits by channel
     fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
