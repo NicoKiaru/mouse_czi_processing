@@ -27,26 +27,6 @@ def ensureList(param) {
 
 workflow {
 
-    // Parameter validation
-    if (!params.outdir) {
-        error "ERROR: --outdir parameter is required but not provided. Please specify an output directory."
-    }
-    
-    // Validate that outdir is a valid path (optional: create if it doesn't exist)
-    try {
-        def outdir = file(params.outdir)
-        if (!outdir.exists()) {
-            log.info "Creating output directory: ${params.outdir}"
-            outdir.mkdirs()
-        }
-        if (!outdir.isDirectory()) {
-            error "ERROR: --outdir '${params.outdir}' exists but is not a directory."
-        }
-        log.info "Output directory validated: ${params.outdir}"
-    } catch (Exception e) {
-        error "ERROR: Invalid output directory path '${params.outdir}': ${e.message}"
-    }
-
     // Check if Fiji already exists, otherwise set it up
     if (file("${params.fiji_cache_dir}/fiji_installation").exists()) {
         fiji_path = Channel.value("${params.fiji_cache_dir}/fiji_installation")

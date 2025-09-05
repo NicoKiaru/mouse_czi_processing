@@ -101,7 +101,7 @@ nextflow run main.nf -resume -profile local --input test_data/ExampleMultiChanne
 to run on multiple files:
 
 ```bash
-nextflow run main.nf -resume -profile local --input /home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small.czi,/home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small3.czi --outdir ./testoutdir
+nextflow run main.nf -resume -profile local --input /home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small.czi,/home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small3.czi
 ```
 
 ## History
