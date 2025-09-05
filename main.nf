@@ -214,9 +214,49 @@ workflow {
     atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
     
     // Run brainreg with primary and additional channels
-    brainregRunRegistration(brainreg_install,
+    brr = brainregRunRegistration(brainreg_install,
                            atlas_cache,
                            brainreg_sweep_input,
                            params)
+
+    //Now we need to link the output of brainreg with: the folder where the data should be put
+    //brainreg_sweep_input.view{println("$it")}
+    //brain
+
+    /*result_and_paths = brr.named_results.map{it[0]}
+         .cross(images) {file -> file.baseName.replaceAll(/_bigstitcher$/, '')}//view{ println("${it[0]}") }*/
+
+    // Process the first channel: extract the first element of each tuple
+    def processed_results = brr.named_results.map { it ->
+        def key = it[0].replaceAll(/_bigstitcher/, '')
+            .replaceAll(/_aligned/, '')
+            .replaceAll(/_tile/, '')
+            .replaceAll(/_icp_refined/, '')
+            .replaceAll(/_asr/, '') // or any other key logic
+        tuple(key, it[1]) // tuple(key, processed_value)
+    }
+
+    //processed_results.view{ println("${it}") }
+
+    // Process the second channel: remove "_bigstitcher" from basename
+    def processed_images = images.map { file ->
+        def key = file.baseName.replaceAll(/_bigstitcher/, '')
+            .replaceAll(/_aligned/, '')
+            .replaceAll(/_tile/, '')
+            .replaceAll(/_icp_refined/, '')
+            .replaceAll(/_asr/, '')
+        tuple(key, file) // tuple(key, processed_value)
+    }
+
+    //processed_images.view{ println("${it}") }
+
+    // Combine the channels by the key to get all combinations
+    result_and_paths = processed_results
+        .combine(processed_images, by: 0)
+        .map { key, result, image ->
+            tuple(key, image, result) // or any other output structure
+        }
+
+    result_and_paths.view{println("$it")}
 
 }
