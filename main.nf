@@ -61,12 +61,23 @@ workflow {
         // Split by comma, trim whitespace, and create channel
         input_files = params.input.split(',').collect { it.trim() }
         images = Channel.fromList(input_files).map { file(it) }
+
+        // Check for duplicate basenames - unique key is required!
+        def basenames = input_files.collect { file(it).baseName }
+        def uniqueBasenames = basenames.unique()
+        if (input_files.size() != uniqueBasenames.size()) {
+            throw new IllegalArgumentException(
+                "Duplicate basenames found in input files: ${uniqueBasenames[0]}. " +
+                "All input files must have unique basenames."
+            )
+        }
+
+        // Debug: show what files were found BEFORE processing
+        images.view { "Found input file: $it" }
     } else {
         log.info "WARNING: no input file defined - running the pipeline will only install tools without using them"
+        images = Channel.empty()
     }
-
-    // Debug: show what files were found BEFORE processing
-    images = images.view { "Found input file: $it" }
     
     // Conditionally stage files based on profile or parameter
     def shouldStageFiles = workflow.profile.contains('slurm')
