@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 
-include { stageFilesRSync } from './modules/upload_data'
+include { stageFilesRSync; copyResultsToImageFolder } from './modules/upload_data'
 
 include { 
     makeCziDatasetForBigstitcher; 
@@ -233,7 +233,7 @@ workflow {
             .replaceAll(/_tile/, '')
             .replaceAll(/_icp_refined/, '')
             .replaceAll(/_asr/, '') // or any other key logic
-        tuple(key, it[1]) // tuple(key, processed_value)
+        tuple(key, it[1], it[2]) // tuple(key, processed_value)
     }
 
     //processed_results.view{ println("${it}") }
@@ -245,7 +245,7 @@ workflow {
             .replaceAll(/_tile/, '')
             .replaceAll(/_icp_refined/, '')
             .replaceAll(/_asr/, '')
-        tuple(key, file) // tuple(key, processed_value)
+        tuple(key, file, file.toString()) // tuple(key, processed_value)
     }
 
     //processed_images.view{ println("${it}") }
@@ -253,10 +253,12 @@ workflow {
     // Combine the channels by the key to get all combinations
     result_and_paths = processed_results
         .combine(processed_images, by: 0)
-        .map { key, result, image ->
-            tuple(key, image, result) // or any other output structure
+        .map { key, combo, output_path, image, image_string ->
+            tuple(key, image, combo, output_path, image_string) // or any other output structure
         }
 
     result_and_paths.view{println("$it")}
+
+    copyResultsToImageFolder(result_and_paths)
 
 }
