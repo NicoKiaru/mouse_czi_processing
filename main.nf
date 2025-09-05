@@ -94,10 +94,8 @@ workflow {
     makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
     xml_not_stitched_with_original_paths = makeCziDatasetForBigstitcher.out
-        .merge(Channel.fromList(input_files)) { xml_file, original_path ->
-            tuple(xml_file, file(original_path))
-        }
-    
+         .cross(images) {file -> file.baseName.replaceAll(/_bigstitcher$/, '')} 
+
     // Debug: Show the pairing
     xml_not_stitched_with_original_paths.view { xml_file, original_path ->
         "Will publish ${xml_file.name} alongside ${original_path}"
@@ -125,19 +123,18 @@ workflow {
         xml_out = icp_refined.icp_refined_xml
     }
 
-    // Pair XML files with their original input paths for publishing
-    // original_paths = images_with_paths.map { original_path, file_obj -> original_path }
-    
-    // Channel.fromList(input_files)
-
-    xml_with_original_paths = xml_out
-        .merge(Channel.fromList(input_files)) { xml_file, original_path ->
-            tuple(xml_file, file(original_path))
-        }
+    // Pair XML files with their original input paths for publishing        
+    xml_with_original_paths = xml_out.cross(images) 
+        {file -> 
+            file.baseName.replaceAll(/_bigstitcher/, '')
+            .replaceAll(/_aligned/, '')
+            .replaceAll(/_tile/, '')
+            .replaceAll(/_icp_refined/, '')
+            .replaceAll(/_asr/, '')} 
     
     // Debug: Show the pairing
     xml_with_original_paths.view { xml_file, original_path ->
-        "Will publish ${xml_file.name} alongside ${original_path}"
+        "Will publish final xml file ${xml_file.name} alongside ${original_path}"
     }
     
     // Publish XML files to source locations
