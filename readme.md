@@ -83,6 +83,12 @@ screen -ls
 To start a screen session with the name `register_brains_0`:
 
 ```bash
+screen -S register_brains_0
+```
+
+To retrieve a screen session with the name `register_brains_0`:
+
+```bash
 screen -r register_brains_0
 ```
 
