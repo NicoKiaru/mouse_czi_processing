@@ -74,6 +74,25 @@ You can then clone this repository or update / pull it.
 
 Then nextflow will need to be ran within a [screen session](https://scitas-doc.epfl.ch/advanced-guide/screen/). Indeed the file transfer can take a long time, and you need not to be kicked out form the session.
 
+To list all screen session in case you have some already running:
+
+```bash
+screen -ls
+```
+
+To start a screen session with the name `register_brains_0`:
+
+```bash
+screen -r register_brains_0
+```
+
+Other commands for screen are:
+
+* screen -S session_name (start a new session)
+* Ctrl+a d (detach from session)
+* screen -ls (list sessions)
+* screen -r session_name (reattach to session)
+
 Once within a screen session, you will need to [mount your NAS drive](https://scitas-doc.epfl.ch/user-guide/data-management/mount-nas/) - typically where your data is located.
 
 The command will look like:
