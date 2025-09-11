@@ -129,25 +129,26 @@ process copyResultsToImageFolder {
     tuple val(key), path(image), val(combo), path(output_files), val(original_path_str)
 
     // No Output
-
+   
     script:
     // Construct the target subfolder name from the parameters
     def paramsString = combo.collect { k, v -> "${k}${v}" }.join('_')
     def originalFile = new File(original_path_str)
     def targetDir = "${originalFile.parent}/${originalFile.baseName}_${paramsString}"
+    
     """
     echo "Create the target directory: ${targetDir}"
     mkdir -p "${targetDir}"
-
-    # Copy each file individually
+    
+    # Copy each file individually with SMB-friendly flags
     for file in ${output_files}; do
-        rsync -av --progress "\$file" "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$file" "${targetDir}/"
     done
-
+    
     # Copy the contents of the niftyreg directory
     niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
     if [ -n "\$niftyreg_dir" ]; then
-        rsync -av --progress "\$niftyreg_dir"/ "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$niftyreg_dir"/ "${targetDir}/"
     fi
     """
 }
