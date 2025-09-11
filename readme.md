@@ -102,6 +102,8 @@ SVNAS_SHARE="smb://intranet;chiarutt@sv-nas1.rcp.epfl.ch/ptbiop-raw"
 gio mount $SVNAS_SHARE
 ```
 
+The shared drive will be mounted in `/home/chiarutt/server` (with the chiarutt login)
+
 In this screen session, you will need to module the Java module:
 
 ```bash
@@ -122,6 +124,23 @@ to run on multiple files:
 ```bash
 nextflow run main.nf -resume -profile local --input /home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small.czi,/home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small3.czi
 ```
+
+Example command on slurm:
+
+```bash
+nextflow run main.nf -resume -profile slurm --input /home/chiarutt/server/public/lana.smith_LSENS/cluster_analysis_data/Demo_LISH_4x8_15pct_647.czi -with-trace
+```
+
+## How to set up this workflow on a SLURM cluster
+
+Make sure nextflow is installed. The installation instructions are provided [here](https://www.nextflow.io/docs/latest/install.html#self-install).
+
+You will need to have a Java module installed, for instance on EPFL's scitas cluster, this is done with `module load openjdk/21.0.0_35-h27dssk`.
+
+Then clone the repository `git clone https://github.com/NicoKiaru/mouse_czi_processing` (current URL).
+
+You should now be able to run the workflow in command line
+
 
 ## History
 
