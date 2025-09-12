@@ -203,9 +203,6 @@ workflow {
     //brainreg_sweep_input.view{println("$it")}
     //brain
 
-    /*result_and_paths = brr.named_results.map{it[0]}
-         .cross(images) {file -> file.baseName.replaceAll(/_bigstitcher$/, '')}//view{ println("${it[0]}") }*/
-
     // Process the first channel: extract the first element of each tuple
     def processed_results = brr.named_results.map { it ->
         def key = it[0].replaceAll(/_bigstitcher/, '')

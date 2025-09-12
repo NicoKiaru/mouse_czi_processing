@@ -303,13 +303,18 @@ process publishInitialXmlToSource {
     
     # Create the output XML filename based on the original file
     XML_FILENAME="${original_path.baseName}_unregistered.xml"
+
+    # Create the replacement string (original_path + ".czi")
+    REPLACEMENT_PATH="${original_path}.czi"
     
-    # Copy the XML file to the original directory
-    cp "${xml_file}" "\${ORIGINAL_DIR}/\${XML_FILENAME}"
-    
+    # Use sed with pattern matching to replace any path between "location":" and ","id":
+    # Use sed with pattern matching - note the single quotes around the pattern
+    sed 's|"location":"[^"]*","id":|"location":"'\"\${REPLACEMENT_PATH}\"'","id":|g' "${xml_file}" > "\${ORIGINAL_DIR}/\${XML_FILENAME}"
+   
     echo "Published XML file: \${ORIGINAL_DIR}/\${XML_FILENAME}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
+    echo "Replacement path: \${REPLACEMENT_PATH}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
     
     echo "Successfully published XML to: \${ORIGINAL_DIR}/\${XML_FILENAME}"
@@ -333,12 +338,17 @@ process publishStitchedXmlToSource {
     # Create the output XML filename based on the original file
     XML_FILENAME="${original_path.baseName}_registered.xml"
     
-    # Copy the XML file to the original directory
-    cp "${xml_file}" "\${ORIGINAL_DIR}/\${XML_FILENAME}"
+    # Create the replacement string (original_path + ".czi")
+    REPLACEMENT_PATH="${original_path}.czi"
+    
+    # Use sed with pattern matching to replace any path between "location":" and ","id":
+    # Use sed with pattern matching - note the single quotes around the pattern
+    sed 's|"location":"[^"]*","id":|"location":"'\"\${REPLACEMENT_PATH}\"'","id":|g' "${xml_file}" > "\${ORIGINAL_DIR}/\${XML_FILENAME}"
     
     echo "Published XML file: \${ORIGINAL_DIR}/\${XML_FILENAME}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
+    echo "Replacement path: \${REPLACEMENT_PATH}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
     
     echo "Successfully published XML to: \${ORIGINAL_DIR}/\${XML_FILENAME}"
