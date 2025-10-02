@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 
-include { stageFilesRSync; copyResultsToImageFolder } from './modules/upload_data'
+include { stageFilesRSync; copyResultsToImageFolder; stageFilesRSyncSSH } from './modules/upload_data'
 
 include { 
     makeCziDatasetForBigstitcher; 
@@ -62,16 +62,16 @@ workflow {
     // Conditionally stage files based on profile or parameter
     def shouldStageFiles = workflow.profile.contains('slurm')
     
-    if (shouldStageFiles) {
+    if (true) {//shouldStageFiles) {
         log.info "File staging enabled (profile: ${workflow.profile}, stage_files: ${params.stage_files})"
-        staged_files = stageFilesRSync(images)
+        staged_files = stageFilesRSyncSSH(images)
     } else {
         log.info "File staging disabled - using files directly"
         staged_files = images
     }
     
     // Makes a bigstitcher xml compatible file from the czi file
-    makeCziDatasetForBigstitcher(staged_files, fiji_path)
+    /*makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
     xml_not_stitched_with_original_paths = makeCziDatasetForBigstitcher.out
          .cross(images) {file -> file.baseName.replaceAll(/_bigstitcher$/, '')} 
@@ -236,6 +236,6 @@ workflow {
 
     result_and_paths.view{println("$it")}
 
-    copyResultsToImageFolder(result_and_paths)
+    copyResultsToImageFolder(result_and_paths)*/
 
 }

@@ -152,3 +152,78 @@ process copyResultsToImageFolder {
     fi
     """
 }
+
+process stageFilesRSyncSSH {
+    tag "stageRSyncSSH_${fileName}"
+    
+    // Disable Nextflow's automatic staging since we're using rsync
+    stageInMode 'none'
+    
+    input:
+    val ssh_path  // String input instead of path
+    
+    output:
+    path "${fileName}", emit: staged_file
+    
+    script:
+    // Extract filename from the SSH path string
+    fileName = ssh_path.split('/')[-1]
+    """
+    echo "Transferring file: ${fileName}"
+    echo "Source: ${ssh_path}"
+    echo "Target: \$(pwd)/${fileName}"
+    
+    # Set rsync options for robust SSH transfer
+    RSYNC_OPTS="-avP"                         # Archive, verbose, progress
+    RSYNC_OPTS="\$RSYNC_OPTS --partial"       # Keep partial transfers for resume
+    RSYNC_OPTS="\$RSYNC_OPTS --compress"      # Compress during transfer (good for CZI)
+    RSYNC_OPTS="\$RSYNC_OPTS --timeout=300"   # 5 minute timeout per file
+    
+    # SSH options for connection stability
+    SSH_OPTS="-o ConnectTimeout=30"
+    SSH_OPTS="\$SSH_OPTS -o ServerAliveInterval=30"
+    SSH_OPTS="\$SSH_OPTS -o ServerAliveCountMax=3"
+    SSH_OPTS="\$SSH_OPTS -o StrictHostKeyChecking=no"
+    
+    # Number of retry attempts
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+    
+    # Transfer with retry logic
+    while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
+        echo "Transfer attempt \$((RETRY_COUNT + 1)) of \$MAX_RETRIES"
+        
+        if rsync \${RSYNC_OPTS} -e "ssh \${SSH_OPTS}" "${ssh_path}" "./${fileName}"; then
+            echo "Successfully transferred via SSH rsync"
+            break
+        else
+            RETRY_COUNT=\$((RETRY_COUNT + 1))
+            if [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; then
+                echo "Transfer failed, retrying in 10 seconds..."
+                sleep 10
+            else
+                echo "ERROR: Failed to transfer after \$MAX_RETRIES attempts"
+                exit 1
+            fi
+        fi
+    done
+    
+    # Verify the transferred file
+    if [ -f "${fileName}" ]; then
+        TRANSFERRED_SIZE=\$(stat -c%s "${fileName}" 2>/dev/null || stat -f%z "${fileName}" 2>/dev/null)
+        echo "Transferred size: \$TRANSFERRED_SIZE bytes"
+        
+        if [ "\$TRANSFERRED_SIZE" -gt 0 ]; then
+            echo "File verification: PASSED (file exists and non-empty)"
+        else
+            echo "ERROR: Transferred file is empty!"
+            exit 1
+        fi
+    else
+        echo "ERROR: Transferred file not found!"
+        exit 1
+    fi
+    
+    echo "File staging completed successfully"
+    """
+}
