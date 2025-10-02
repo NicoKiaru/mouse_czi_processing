@@ -124,106 +124,63 @@ process stageFilesRSync {
 
 process copyResultsToImageFolder {
     tag "${key}_${combo.collect { k, v -> "${k}${v}" }.join('_')}" // Optional: for logging/identification
-
+    
     input:
-    tuple val(key), path(image), val(combo), path(output_files), val(original_path_str)
-
+    tuple val(key), val(ssh_path), val(combo), path(output_files), val(original_path_str)
+    
     // No Output
    
     script:
+    // Parse SSH path: user@host:/path/to/file
+    def parts = original_path_str.split(':')
+    def sshHost = parts[0]  // user@host
+    def remotePath = parts[1]  // /path/to/file
+    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
+    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
+    
     // Construct the target subfolder name from the parameters
     def paramsString = combo.collect { k, v -> "${k}${v}" }.join('_')
-    def originalFile = new File(original_path_str)
-    def targetDir = "${originalFile.parent}/${originalFile.baseName}_${paramsString}"
+    def targetDir = "${remoteDir}/${basename}_${paramsString}"
     
     """
-    echo "Create the target directory: ${targetDir}"
-    mkdir -p "${targetDir}"
+    echo "Create the target directory via SSH: ${sshHost}:${targetDir}"
+    ssh ${sshHost} "mkdir -p ${targetDir}"
     
-    # Copy each file individually with SMB-friendly flags
+    # Copy each file individually with SMB-friendly flags to remote server
     for file in ${output_files}; do
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$file" "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${sshHost}:${targetDir}/"
     done
     
     # Copy the contents of the niftyreg directory
     niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
     if [ -n "\$niftyreg_dir" ]; then
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$niftyreg_dir"/ "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${sshHost}:${targetDir}/"
     fi
+    
+    echo "Successfully copied results to: ${sshHost}:${targetDir}"
     """
 }
 
 process stageFilesRSyncSSH {
-    tag "stageRSyncSSH_${fileName}"
-    
-    // Disable Nextflow's automatic staging since we're using rsync
-    stageInMode 'none'
+    tag "stageRSyncSSH_${ssh_path.split('/')[-1]}"
+
+    // Disable Nextflow's automatic staging
+    stageInMode 'copy'
     
     input:
-    val ssh_path  // String input instead of path
+    val(ssh_path)
     
     output:
-    path "${fileName}", emit: staged_file
+    path "${ssh_path.split('/')[-1]}", emit: staged_file
     
     script:
-    // Extract filename from the SSH path string
-    fileName = ssh_path.split('/')[-1]
+    def filename = ssh_path.split('/')[-1]
     """
-    echo "Transferring file: ${fileName}"
-    echo "Source: ${ssh_path}"
-    echo "Target: \$(pwd)/${fileName}"
+    rsync -avz --progress "${ssh_path}" ./
     
-    # Set rsync options for robust SSH transfer
-    RSYNC_OPTS="-avP"                         # Archive, verbose, progress
-    RSYNC_OPTS="\$RSYNC_OPTS --partial"       # Keep partial transfers for resume
-    RSYNC_OPTS="\$RSYNC_OPTS --compress"      # Compress during transfer (good for CZI)
-    RSYNC_OPTS="\$RSYNC_OPTS --timeout=300"   # 5 minute timeout per file
-    
-    # SSH options for connection stability
-    SSH_OPTS="-o ConnectTimeout=30"
-    SSH_OPTS="\$SSH_OPTS -o ServerAliveInterval=30"
-    SSH_OPTS="\$SSH_OPTS -o ServerAliveCountMax=3"
-    SSH_OPTS="\$SSH_OPTS -o StrictHostKeyChecking=no"
-    
-    # Number of retry attempts
-    MAX_RETRIES=3
-    RETRY_COUNT=0
-    
-    # Transfer with retry logic
-    while [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; do
-        echo "Transfer attempt \$((RETRY_COUNT + 1)) of \$MAX_RETRIES"
-        
-        if rsync \${RSYNC_OPTS} -e "ssh \${SSH_OPTS}" "${ssh_path}" "./${fileName}"; then
-            echo "Successfully transferred via SSH rsync"
-            break
-        else
-            RETRY_COUNT=\$((RETRY_COUNT + 1))
-            if [ \$RETRY_COUNT -lt \$MAX_RETRIES ]; then
-                echo "Transfer failed, retrying in 10 seconds..."
-                sleep 10
-            else
-                echo "ERROR: Failed to transfer after \$MAX_RETRIES attempts"
-                exit 1
-            fi
-        fi
-    done
-    
-    # Verify the transferred file
-    if [ -f "${fileName}" ]; then
-        TRANSFERRED_SIZE=\$(stat -c%s "${fileName}" 2>/dev/null || stat -f%z "${fileName}" 2>/dev/null)
-        echo "Transferred size: \$TRANSFERRED_SIZE bytes"
-        
-        if [ "\$TRANSFERRED_SIZE" -gt 0 ]; then
-            echo "File verification: PASSED (file exists and non-empty)"
-        else
-            echo "ERROR: Transferred file is empty!"
-            exit 1
-        fi
-    else
-        echo "ERROR: Transferred file not found!"
+    if [ ! -f "${filename}" ]; then
+        echo "ERROR: File transfer failed"
         exit 1
     fi
-    
-    echo "File staging completed successfully"
     """
 }

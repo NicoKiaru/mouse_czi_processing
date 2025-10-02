@@ -288,7 +288,7 @@ process getVoxelSizes {
 }
 
 process publishInitialXmlToSource {
-    tag "publish xml for ${original_path.baseName}"
+    tag "publish xml for ${original_path.split('/')[-1]}"
     
     input:
     tuple path(xml_file), val(original_path)
@@ -297,32 +297,35 @@ process publishInitialXmlToSource {
     path "published_xml_info.txt", emit: publish_log
     
     script:
+    // Parse SSH path: user@host:/path/to/file
+    def parts = original_path.split(':')
+    def sshHost = parts[0]  // user@host
+    def remotePath = parts[1]  // /path/to/file
+    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
+    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
+    def xmlFilename = "${basename}_unregistered.xml"
+    
     """
-    # Get the directory of the original file
-    ORIGINAL_DIR="\$(dirname "${original_path}")"
+    # Modify the XML file to use the correct remote path
+    sed 's|"location":"[^"]*","id":|"location":"${remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
     
-    # Create the output XML filename based on the original file
-    XML_FILENAME="${original_path.baseName}_unregistered.xml"
-
-    # Create the replacement string (original_path + ".czi")
-    REPLACEMENT_PATH="${original_path}.czi"
+    # Copy the modified XML back with SMB/NFS-friendly flags
+    rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
+        "${xmlFilename}" "${sshHost}:${remoteDir}/"
     
-    # Use sed with pattern matching to replace any path between "location":" and ","id":
-    # Use sed with pattern matching - note the single quotes around the pattern
-    sed 's|"location":"[^"]*","id":|"location":"'\"\${REPLACEMENT_PATH}\"'","id":|g' "${xml_file}" > "\${ORIGINAL_DIR}/\${XML_FILENAME}"
-   
-    echo "Published XML file: \${ORIGINAL_DIR}/\${XML_FILENAME}" > published_xml_info.txt
+    # Create log file
+    echo "Published XML file via SSH: ${sshHost}:${remoteDir}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
-    echo "Replacement path: \${REPLACEMENT_PATH}" >> published_xml_info.txt
+    echo "Replacement path: ${remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
     
-    echo "Successfully published XML to: \${ORIGINAL_DIR}/\${XML_FILENAME}"
+    echo "Successfully published XML via rsync to: ${sshHost}:${remoteDir}/${xmlFilename}"
     """
 }
 
 process publishStitchedXmlToSource {
-    tag "publish xml for ${original_path.baseName}"
+    tag "publish xml for ${original_path.split('/')[-1]}"
     
     input:
     tuple path(xml_file), val(original_path)
@@ -331,26 +334,29 @@ process publishStitchedXmlToSource {
     path "published_xml_info.txt", emit: publish_log
     
     script:
+    // Parse SSH path: user@host:/path/to/file
+    def parts = original_path.split(':')
+    def sshHost = parts[0]  // user@host
+    def remotePath = parts[1]  // /path/to/file
+    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
+    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
+    def xmlFilename = "${basename}_registered.xml"
+    
     """
-    # Get the directory of the original file
-    ORIGINAL_DIR="\$(dirname "${original_path}")"
+    # Modify the XML file to use the correct remote path
+    sed 's|"location":"[^"]*","id":|"location":"${remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
     
-    # Create the output XML filename based on the original file
-    XML_FILENAME="${original_path.baseName}_registered.xml"
+    # Copy the modified XML back with SMB/NFS-friendly flags
+    rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
+        "${xmlFilename}" "${sshHost}:${remoteDir}/"
     
-    # Create the replacement string (original_path + ".czi")
-    REPLACEMENT_PATH="${original_path}.czi"
-    
-    # Use sed with pattern matching to replace any path between "location":" and ","id":
-    # Use sed with pattern matching - note the single quotes around the pattern
-    sed 's|"location":"[^"]*","id":|"location":"'\"\${REPLACEMENT_PATH}\"'","id":|g' "${xml_file}" > "\${ORIGINAL_DIR}/\${XML_FILENAME}"
-    
-    echo "Published XML file: \${ORIGINAL_DIR}/\${XML_FILENAME}" > published_xml_info.txt
+    # Create log file
+    echo "Published XML file via SSH: ${sshHost}:${remoteDir}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
-    echo "Replacement path: \${REPLACEMENT_PATH}" >> published_xml_info.txt
+    echo "Replacement path: ${remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
     
-    echo "Successfully published XML to: \${ORIGINAL_DIR}/\${XML_FILENAME}"
+    echo "Successfully published XML via rsync to: ${sshHost}:${remoteDir}/${xmlFilename}"
     """
 }
