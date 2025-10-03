@@ -1,0 +1,5 @@
+task_id	hash	native_id	name	status	exit	submit	duration	realtime	%cpu	peak_rss	peak_vmem	rchar	wchar
+1	99/102bab	2725789	makeCziDatasetForBigstitcher (make bigstitcher xml from czi MS201)	CACHED	0	2025-09-24 16:50:16.572	58.6s	58.1s	61.8%	2.8 GB	254.4 GB	100.7 MB	12.6 MB
+4	ca/4a7b45	2731374	publishInitialXmlToSource (publish xml for MS201)	CACHED	0	2025-09-24 16:51:15.383	698ms	291ms	8.1%	0	0	447.3 KB	61.5 KB
+3	1f/eed3b3	119076	alignChannelsWithBigstitcher (align channels MS201_bigstitcher)	FAILED	137	2025-09-25 10:34:33.479	49.8s	49.7s	-	-	-	-	-
+2	b8/1c1593	119067	brainregEnvInstall	ABORTED	-	2025-09-25 10:34:33.373	-	-	-	-	-	-	-
