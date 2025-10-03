@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 
-include { stageFilesRSync; copyResultsToImageFolder } from './modules/upload_data'
+include { stageFilesRSync; copyResultsToImageFolder; stageFilesRSyncSSH } from './modules/upload_data'
 
 include { 
     makeCziDatasetForBigstitcher; 
@@ -40,10 +40,27 @@ workflow {
     if (params.input) {
         // Split by comma, trim whitespace, and create channel
         input_files = params.input.split(',').collect { it.trim() }
-        images = Channel.fromList(input_files).map { file(it) }
+        //images = Channel.fromList(input_files).map { file(it) }
 
+        // Separate SSH paths from local paths
+        images = Channel.fromList(input_files).map { path_str ->
+            if (path_str.contains('@') && path_str.contains(':')) {
+                // This is an SSH path - don't try to convert to file object
+                println("PATH_STR="+path_str)
+                return path_str //tuple('ssh', path_str)
+            } /*else {
+                // This is a local path
+                return tuple('local', file(path_str))
+            }*/
+        }
+        println("ALORS ?????")
         // Check for duplicate basenames - unique key is required!
-        def basenames = input_files.collect { file(it).baseName }
+        def basenames = input_files.collect {
+            def basename = it.toString().split('/')[-1].replaceAll(/\.[^.]+$/, '')
+            println("BASENAME="+basename)
+            return basename
+        }
+
         def uniqueBasenames = basenames.unique()
         if (input_files.size() != uniqueBasenames.size()) {
             throw new IllegalArgumentException(
@@ -62,9 +79,9 @@ workflow {
     // Conditionally stage files based on profile or parameter
     def shouldStageFiles = workflow.profile.contains('slurm')
     
-    if (shouldStageFiles) {
+    if (true) {//shouldStageFiles) {
         log.info "File staging enabled (profile: ${workflow.profile}, stage_files: ${params.stage_files})"
-        staged_files = stageFilesRSync(images)
+        staged_files = stageFilesRSyncSSH(images)
     } else {
         log.info "File staging disabled - using files directly"
         staged_files = images
@@ -74,11 +91,19 @@ workflow {
     makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
     xml_not_stitched_with_original_paths = makeCziDatasetForBigstitcher.out
-         .cross(images) {file -> file.baseName.replaceAll(/_bigstitcher$/, '')} 
+         .cross(images) {file -> 
+            println("TADA! "+file[1])
+            //file.baseName.replaceAll(/_bigstitcher$/, '')
+            def filename = file.toString().split('/')[-1]  // Get last part after /
+            def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
+            def result = basename.replaceAll(/_bigstitcher$/, '')  // Remove _bigstitcher suffix
+            println("TD "+result)
+            return result
+         } 
 
     // Debug: Show the pairing
     xml_not_stitched_with_original_paths.view { xml_file, original_path ->
-        "Will publish ${xml_file.name} alongside ${original_path}"
+        println("Will publish ${xml_file.name} alongside ${original_path}")
     }
     
     // Publish XML files to source locations
@@ -106,11 +131,17 @@ workflow {
     // Pair XML files with their original input paths for publishing        
     xml_with_original_paths = xml_out.cross(images) 
         {file -> 
-            file.baseName.replaceAll(/_bigstitcher/, '')
-            .replaceAll(/_aligned/, '')
-            .replaceAll(/_tile/, '')
-            .replaceAll(/_icp_refined/, '')
-            .replaceAll(/_asr/, '')} 
+            // Extract filename from path, remove extension, then remove all suffixes
+            def filename = file.toString().split('/')[-1]  // Get last part after /
+            def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
+            def result = basename
+                .replaceAll(/_bigstitcher/, '')
+                .replaceAll(/_aligned/, '')
+                .replaceAll(/_tile/, '')
+                .replaceAll(/_icp_refined/, '')
+                .replaceAll(/_asr/, '')
+            return result
+        } 
     
     // Debug: Show the pairing
     xml_with_original_paths.view { xml_file, original_path ->
@@ -213,25 +244,29 @@ workflow {
         tuple(key, it[1], it[2]) // tuple(key, processed_value)
     }
 
-    //processed_results.view{ println("${it}") }
+    processed_results.view{ println("${it}") }
 
     // Process the second channel: remove "_bigstitcher" from basename
-    def processed_images = images.map { file ->
-        def key = file.baseName.replaceAll(/_bigstitcher/, '')
+    def processed_images = images.map { path_str ->
+        // Extract filename from SSH path, remove extension, then remove all suffixes
+        def filename = path_str.toString().split('/')[-1]  // Get last part after /
+        def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
+        def key = basename
+            .replaceAll(/_bigstitcher/, '')
             .replaceAll(/_aligned/, '')
             .replaceAll(/_tile/, '')
             .replaceAll(/_icp_refined/, '')
             .replaceAll(/_asr/, '')
-        tuple(key, file, file.toString()) // tuple(key, processed_value)
+        tuple(key, path_str, path_str.toString()) // tuple(key, ssh_path, ssh_path_string)
     }
 
-    //processed_images.view{ println("${it}") }
+    processed_images.view{ println("${it}") }
 
     // Combine the channels by the key to get all combinations
     result_and_paths = processed_results
         .combine(processed_images, by: 0)
-        .map { key, combo, output_path, image, image_string ->
-            tuple(key, image, combo, output_path, image_string) // or any other output structure
+        .map { key, combo, output_path, ssh_path, ssh_path_string ->
+            tuple(key, ssh_path, combo, output_path, ssh_path_string) // or any other output structure
         }
 
     result_and_paths.view{println("$it")}

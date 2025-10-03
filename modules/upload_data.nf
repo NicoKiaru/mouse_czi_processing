@@ -124,31 +124,63 @@ process stageFilesRSync {
 
 process copyResultsToImageFolder {
     tag "${key}_${combo.collect { k, v -> "${k}${v}" }.join('_')}" // Optional: for logging/identification
-
+    
     input:
-    tuple val(key), path(image), val(combo), path(output_files), val(original_path_str)
-
+    tuple val(key), val(ssh_path), val(combo), path(output_files), val(original_path_str)
+    
     // No Output
    
     script:
+    // Parse SSH path: user@host:/path/to/file
+    def parts = original_path_str.split(':')
+    def sshHost = parts[0]  // user@host
+    def remotePath = parts[1]  // /path/to/file
+    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
+    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
+    
     // Construct the target subfolder name from the parameters
     def paramsString = combo.collect { k, v -> "${k}${v}" }.join('_')
-    def originalFile = new File(original_path_str)
-    def targetDir = "${originalFile.parent}/${originalFile.baseName}_${paramsString}"
+    def targetDir = "${remoteDir}/${basename}_${paramsString}"
     
     """
-    echo "Create the target directory: ${targetDir}"
-    mkdir -p "${targetDir}"
+    echo "Create the target directory via SSH: ${sshHost}:${targetDir}"
+    ssh ${sshHost} "mkdir -p ${targetDir}"
     
-    # Copy each file individually with SMB-friendly flags
+    # Copy each file individually with SMB-friendly flags to remote server
     for file in ${output_files}; do
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$file" "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${sshHost}:${targetDir}/"
     done
     
     # Copy the contents of the niftyreg directory
     niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
     if [ -n "\$niftyreg_dir" ]; then
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --modify-window=1 "\$niftyreg_dir"/ "${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${sshHost}:${targetDir}/"
+    fi
+    
+    echo "Successfully copied results to: ${sshHost}:${targetDir}"
+    """
+}
+
+process stageFilesRSyncSSH {
+    tag "stageRSyncSSH_${ssh_path.split('/')[-1]}"
+
+    // Disable Nextflow's automatic staging
+    stageInMode 'copy'
+    
+    input:
+    val(ssh_path)
+    
+    output:
+    path "${ssh_path.split('/')[-1]}", emit: staged_file
+    
+    script:
+    def filename = ssh_path.split('/')[-1]
+    """
+    rsync -avz --progress "${ssh_path}" ./
+    
+    if [ ! -f "${filename}" ]; then
+        echo "ERROR: File transfer failed"
+        exit 1
     fi
     """
 }

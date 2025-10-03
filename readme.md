@@ -137,6 +137,12 @@ Example command on slurm:
 nextflow run main.nf -resume -profile slurm --input /home/chiarutt/server/public/lana.smith_LSENS/cluster_analysis_data/Demo_LISH_4x8_15pct_647.czi -with-trace
 ```
 
+Example command with ssh
+
+```bash
+nextflow run main.nf -resume -profile local --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi -with-trace
+```
+
 ## How to set up this workflow on a SLURM cluster
 
 Make sure nextflow is installed. The installation instructions are provided [here](https://www.nextflow.io/docs/latest/install.html#self-install).
