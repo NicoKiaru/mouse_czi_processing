@@ -298,65 +298,57 @@ process publishInitialXmlToSource {
     
     script:
     // Parse SSH path: user@host:/path/to/file
-    def parts = original_path.split(':')
-    def sshHost = parts[0]  // user@host
-    def remotePath = parts[1]  // /path/to/file
-    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
-    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
-    def xmlFilename = "${basename}_unregistered.xml"
-    
+    def sshInfo = PathUtils.parseSshPath(original_path)
+    def xmlFilename = "${sshInfo.basename}_unregistered.xml"
+
     """
     # Modify the XML file to use the correct remote path
-    sed 's|"location":"[^"]*","id":|"location":"${remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
-    
+    sed 's|"location":"[^"]*","id":|"location":"${sshInfo.remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
+
     # Copy the modified XML back with SMB/NFS-friendly flags
     rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
-        "${xmlFilename}" "${sshHost}:${remoteDir}/"
-    
+        "${xmlFilename}" "${sshInfo.sshHost}:${sshInfo.remoteDir}/"
+
     # Create log file
-    echo "Published XML file via SSH: ${sshHost}:${remoteDir}/${xmlFilename}" > published_xml_info.txt
+    echo "Published XML file via SSH: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
-    echo "Replacement path: ${remotePath}" >> published_xml_info.txt
+    echo "Replacement path: ${sshInfo.remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
-    
-    echo "Successfully published XML via rsync to: ${sshHost}:${remoteDir}/${xmlFilename}"
+
+    echo "Successfully published XML via rsync to: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}"
     """
 }
 
 process publishStitchedXmlToSource {
     tag "publish xml for ${original_path.split('/')[-1]}"
-    
+
     input:
     tuple path(xml_file), val(original_path)
-    
+
     output:
     path "published_xml_info.txt", emit: publish_log
-    
+
     script:
     // Parse SSH path: user@host:/path/to/file
-    def parts = original_path.split(':')
-    def sshHost = parts[0]  // user@host
-    def remotePath = parts[1]  // /path/to/file
-    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
-    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
-    def xmlFilename = "${basename}_registered.xml"
-    
+    def sshInfo = PathUtils.parseSshPath(original_path)
+    def xmlFilename = "${sshInfo.basename}_registered.xml"
+
     """
     # Modify the XML file to use the correct remote path
-    sed 's|"location":"[^"]*","id":|"location":"${remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
-    
+    sed 's|"location":"[^"]*","id":|"location":"${sshInfo.remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
+
     # Copy the modified XML back with SMB/NFS-friendly flags
     rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
-        "${xmlFilename}" "${sshHost}:${remoteDir}/"
-    
+        "${xmlFilename}" "${sshInfo.sshHost}:${sshInfo.remoteDir}/"
+
     # Create log file
-    echo "Published XML file via SSH: ${sshHost}:${remoteDir}/${xmlFilename}" > published_xml_info.txt
+    echo "Published XML file via SSH: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
-    echo "Replacement path: ${remotePath}" >> published_xml_info.txt
+    echo "Replacement path: ${sshInfo.remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
-    
-    echo "Successfully published XML via rsync to: ${sshHost}:${remoteDir}/${xmlFilename}"
+
+    echo "Successfully published XML via rsync to: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}"
     """
 }

@@ -46,18 +46,16 @@ workflow {
         images = Channel.fromList(input_files).map { path_str ->
             if (path_str.contains('@') && path_str.contains(':')) {
                 // This is an SSH path - don't try to convert to file object
-                println("PATH_STR="+path_str)
-                return path_str //tuple('ssh', path_str)
+                return path_str
             } /*else {
                 // This is a local path
                 return tuple('local', file(path_str))
             }*/
         }
-        println("ALORS ?????")
+
         // Check for duplicate basenames - unique key is required!
         def basenames = input_files.collect {
-            def basename = it.toString().split('/')[-1].replaceAll(/\.[^.]+$/, '')
-            println("BASENAME="+basename)
+            def basename = PathUtils.extractBasename(it)
             return basename
         }
 
@@ -79,7 +77,7 @@ workflow {
     // Conditionally stage files based on profile or parameter
     def shouldStageFiles = workflow.profile.contains('slurm')
     
-    if (true) {//shouldStageFiles) {
+    if (shouldStageFiles) {
         log.info "File staging enabled (profile: ${workflow.profile}, stage_files: ${params.stage_files})"
         staged_files = stageFilesRSyncSSH(images)
     } else {
@@ -90,20 +88,29 @@ workflow {
     // Makes a bigstitcher xml compatible file from the czi file
     makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
-    xml_not_stitched_with_original_paths = makeCziDatasetForBigstitcher.out
-         .cross(images) {file -> 
-            println("TADA! "+file[1])
-            //file.baseName.replaceAll(/_bigstitcher$/, '')
-            def filename = file.toString().split('/')[-1]  // Get last part after /
-            def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
-            def result = basename.replaceAll(/_bigstitcher$/, '')  // Remove _bigstitcher suffix
-            println("TD "+result)
-            return result
-         } 
+    // Add keys to both channels for joining
+    xml_with_keys = makeCziDatasetForBigstitcher.out
+        .map { xml_file ->
+            def key = PathUtils.getBaseKey(xml_file.toString())
+            tuple(key, xml_file)
+        }
+
+    images_with_keys = images
+        .map { original_path ->
+            def key = PathUtils.getBaseKey(original_path)
+            tuple(key, original_path)
+        }
+
+    // Join by key (inner join - only matching items)
+    xml_not_stitched_with_original_paths = xml_with_keys
+        .join(images_with_keys)
+        .map { key, xml_file, original_path ->
+            tuple(xml_file, original_path)
+        }
 
     // Debug: Show the pairing
     xml_not_stitched_with_original_paths.view { xml_file, original_path ->
-        println("Will publish ${xml_file.name} alongside ${original_path}")
+        "Will publish ${xml_file.name} alongside ${original_path}"
     }
     
     // Publish XML files to source locations
@@ -128,21 +135,20 @@ workflow {
         xml_out = icp_refined.icp_refined_xml
     }
 
-    // Pair XML files with their original input paths for publishing        
-    xml_with_original_paths = xml_out.cross(images) 
-        {file -> 
-            // Extract filename from path, remove extension, then remove all suffixes
-            def filename = file.toString().split('/')[-1]  // Get last part after /
-            def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
-            def result = basename
-                .replaceAll(/_bigstitcher/, '')
-                .replaceAll(/_aligned/, '')
-                .replaceAll(/_tile/, '')
-                .replaceAll(/_icp_refined/, '')
-                .replaceAll(/_asr/, '')
-            return result
-        } 
-    
+    // Pair XML files with their original input paths for publishing
+    xml_out_with_keys = xml_out
+        .map { xml_file ->
+            def key = PathUtils.getBaseKey(xml_file.toString())
+            tuple(key, xml_file)
+        }
+
+    // Reuse images_with_keys from earlier (channels can be consumed multiple times)
+    xml_with_original_paths = xml_out_with_keys
+        .join(images_with_keys)
+        .map { key, xml_file, original_path ->
+            tuple(xml_file, original_path)
+        }
+
     // Debug: Show the pairing
     xml_with_original_paths.view { xml_file, original_path ->
         "Will publish final xml file ${xml_file.name} alongside ${original_path}"
@@ -183,12 +189,23 @@ workflow {
         params.brainreg.channel_used_for_registration
     )
     
-    // Combine everything for brainreg input (same order guaranteed)
-    brainreg_input = organized_channels.organized_channels
-        .merge(voxel_results.voxel_sizes) { organized_tuple, voxel_tuple -> 
-            def (primary, additional, base_name) = organized_tuple
-            def (voxel_name, x, y, z) = voxel_tuple
-            return tuple(primary, additional, base_name, x, y, z)
+    // Combine everything for brainreg input using explicit key-based join
+    organized_with_keys = organized_channels.organized_channels
+        .map { primary, additional, base_name ->
+            def key = PathUtils.getBaseKey(base_name)
+            tuple(key, primary, additional, base_name)
+        }
+
+    voxel_with_keys = voxel_results.voxel_sizes
+        .map { voxel_name, x, y, z ->
+            def key = PathUtils.getBaseKey(voxel_name)
+            tuple(key, x, y, z)
+        }
+
+    brainreg_input = organized_with_keys
+        .join(voxel_with_keys)
+        .map { key, primary, additional, base_name, x, y, z ->
+            tuple(primary, additional, base_name, x, y, z)
         }
     
     // Debug: View what will be processed
@@ -230,46 +247,24 @@ workflow {
                            brainreg_sweep_input,
                            params)
 
-    //Now we need to link the output of brainreg with: the folder where the data should be put
-    //brainreg_sweep_input.view{println("$it")}
-    //brain
-
     // Process the first channel: extract the first element of each tuple
     def processed_results = brr.named_results.map { it ->
-        def key = it[0].replaceAll(/_bigstitcher/, '')
-            .replaceAll(/_aligned/, '')
-            .replaceAll(/_tile/, '')
-            .replaceAll(/_icp_refined/, '')
-            .replaceAll(/_asr/, '') // or any other key logic
-        tuple(key, it[1], it[2]) // tuple(key, processed_value)
+        def key = PathUtils.getBaseKey(it[0])
+        tuple(key, it[1], it[2])
     }
 
-    processed_results.view{ println("${it}") }
-
-    // Process the second channel: remove "_bigstitcher" from basename
+    // Process the second channel: use getBaseKey for consistent key extraction
     def processed_images = images.map { path_str ->
-        // Extract filename from SSH path, remove extension, then remove all suffixes
-        def filename = path_str.toString().split('/')[-1]  // Get last part after /
-        def basename = filename.replaceAll(/\.[^.]+$/, '')  // Remove extension
-        def key = basename
-            .replaceAll(/_bigstitcher/, '')
-            .replaceAll(/_aligned/, '')
-            .replaceAll(/_tile/, '')
-            .replaceAll(/_icp_refined/, '')
-            .replaceAll(/_asr/, '')
-        tuple(key, path_str, path_str.toString()) // tuple(key, ssh_path, ssh_path_string)
+        def key = PathUtils.getBaseKey(path_str)
+        tuple(key, path_str, path_str.toString())
     }
-
-    processed_images.view{ println("${it}") }
 
     // Combine the channels by the key to get all combinations
     result_and_paths = processed_results
         .combine(processed_images, by: 0)
         .map { key, combo, output_path, ssh_path, ssh_path_string ->
-            tuple(key, ssh_path, combo, output_path, ssh_path_string) // or any other output structure
+            tuple(key, ssh_path, combo, output_path, ssh_path_string)
         }
-
-    result_and_paths.view{println("$it")}
 
     copyResultsToImageFolder(result_and_paths)
 

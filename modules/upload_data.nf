@@ -132,32 +132,28 @@ process copyResultsToImageFolder {
    
     script:
     // Parse SSH path: user@host:/path/to/file
-    def parts = original_path_str.split(':')
-    def sshHost = parts[0]  // user@host
-    def remotePath = parts[1]  // /path/to/file
-    def remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
-    def basename = remotePath.split('/')[-1].replaceAll(/\.[^.]+$/, '')
-    
+    def sshInfo = PathUtils.parseSshPath(original_path_str)
+
     // Construct the target subfolder name from the parameters
     def paramsString = combo.collect { k, v -> "${k}${v}" }.join('_')
-    def targetDir = "${remoteDir}/${basename}_${paramsString}"
-    
+    def targetDir = "${sshInfo.remoteDir}/${sshInfo.basename}_${paramsString}"
+
     """
-    echo "Create the target directory via SSH: ${sshHost}:${targetDir}"
-    ssh ${sshHost} "mkdir -p ${targetDir}"
-    
+    echo "Create the target directory via SSH: ${sshInfo.sshHost}:${targetDir}"
+    ssh ${sshInfo.sshHost} "mkdir -p ${targetDir}"
+
     # Copy each file individually with SMB-friendly flags to remote server
     for file in ${output_files}; do
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${sshHost}:${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${sshInfo.sshHost}:${targetDir}/"
     done
-    
+
     # Copy the contents of the niftyreg directory
     niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
     if [ -n "\$niftyreg_dir" ]; then
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${sshHost}:${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${sshInfo.sshHost}:${targetDir}/"
     fi
-    
-    echo "Successfully copied results to: ${sshHost}:${targetDir}"
+
+    echo "Successfully copied results to: ${sshInfo.sshHost}:${targetDir}"
     """
 }
 
