@@ -1,6 +1,0 @@
-task_id	hash	native_id	name	status	exit	submit	duration	realtime	%cpu	peak_rss	peak_vmem	rchar	wchar
-1	da/581eea	2701887	setupFiji (fiji-setup)	COMPLETED	0	2025-09-24 16:41:11.175	4m 52s	4m 52s	24.6%	4.5 GB	252.5 GB	1 GB	1.3 GB
-3	dd/72b968	2715427	makeCziDatasetForBigstitcher (make bigstitcher xml from czi MS201)	COMPLETED	0	2025-09-24 16:46:03.678	48.5s	48.4s	70.9%	2.1 GB	253.5 GB	100.9 MB	12.6 MB
-5	ce/603fc8	2718166	publishInitialXmlToSource (publish xml for MS201)	COMPLETED	0	2025-09-24 16:46:52.290	700ms	288ms	10.1%	0	0	447 KB	61.5 KB
-4	08/0f801a	2718158	alignChannelsWithBigstitcher (align channels MS201_bigstitcher)	FAILED	137	2025-09-24 16:46:52.273	45.9s	45.8s	-	-	-	-	-
-2	50/5d20d1	2711063	brainregEnvInstall	ABORTED	-	2025-09-24 16:44:49.369	-	-	-	-	-	-	-
