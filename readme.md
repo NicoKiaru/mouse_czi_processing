@@ -140,7 +140,7 @@ nextflow run main.nf -resume -profile slurm --input /home/chiarutt/server/public
 Example command with ssh
 
 ```bash
-nextflow run main.nf -resume -profile local --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi -with-trace
+nextflow run main.nf -resume -profile slurm --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi -with-trace
 ```
 
 ## How to set up this workflow on a SLURM cluster
