@@ -117,30 +117,46 @@ module load openjdk/21.0.0_35-h27dssk
 module --show-hidden av 
 ```
 
-You can then run the workflow
+You can then run the workflow.
 
-Example command line:
+### Recommended usage (with `--brain_id`)
+
+The simplest way to run the pipeline uses `--brain_id` and `--user_name`. The SSH paths are constructed automatically from the data layout:
+
+```bash
+# Single brain
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith -with-trace
+
+# Multiple brains
+nextflow run main.nf -resume -profile slurm --brain_id MS181,LS010 --user_name Lana_Smith -with-trace
+```
+
+### Dry run (preview paths without processing)
+
+To check which input/output paths will be used without actually running any processing:
+
+```bash
+nextflow run main.nf --brain_id MS181,LS010 --user_name Lana_Smith --dry_run
+```
+
+### Other examples
+
+Local execution with explicit path:
 
 ```bash
 nextflow run main.nf -resume -profile local --input test_data/ExampleMultiChannel.czi -with-trace
 ```
 
-to run on multiple files:
+Multiple files with explicit paths:
 
 ```bash
-nextflow run main.nf -resume -profile local --input /home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small.czi,/home/chiarutt/nextflow-projects/mouse_czi_processing/test_data/Small3.czi
+nextflow run main.nf -resume -profile local --input /path/to/Small.czi,/path/to/Small3.czi
 ```
 
-Example command on slurm:
+SLURM with explicit SSH path (`--user_name` still needed for output publishing):
 
 ```bash
-nextflow run main.nf -resume -profile slurm --input /home/chiarutt/server/public/lana.smith_LSENS/cluster_analysis_data/Demo_LISH_4x8_15pct_647.czi -with-trace
-```
-
-Example command with ssh
-
-```bash
-nextflow run main.nf -resume -profile slurm --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi -with-trace
+nextflow run main.nf -resume -profile slurm --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi --user_name Lana_Smith -with-trace
 ```
 
 ## How to set up this workflow on a SLURM cluster

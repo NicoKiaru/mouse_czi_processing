@@ -27,19 +27,50 @@ def ensureList(param) {
 
 workflow {
 
-    // If brain_id is provided, construct SSH input paths from the data layout
+    // Resolve input: construct SSH paths from brain_id, or use --input directly
+    def resolved_input = params.input
     if (params.brain_id && !params.input) {
         def brain_ids = params.brain_id.split(',').collect { it.trim() }
         def constructed = brain_ids.collect { id ->
             "${params.ssh_host}:${params.input_base_path}/${id}/Anatomy/${id}.czi"
         }
-        params.input = constructed.join(',')
-        log.info "Constructed input paths from brain_id: ${params.input}"
+        resolved_input = constructed.join(',')
+        log.info "Constructed input paths from brain_id: ${resolved_input}"
     }
 
     // Validate user_name is set when publishing is needed
-    if (params.input && params.input.contains('@') && !params.user_name) {
+    if (resolved_input && resolved_input.contains('@') && !params.user_name) {
         log.warn "WARNING: --user_name not set. Output publishing to analysis directory will be disabled."
+    }
+
+    // Dry run: print resolved paths and exit
+    if (params.dry_run) {
+        log.info "========================================="
+        log.info "  DRY RUN - No processing will be done"
+        log.info "========================================="
+        if (resolved_input) {
+            def dry_run_files = resolved_input.split(',').collect { it.trim() }
+            dry_run_files.each { path_str ->
+                def key = PathUtils.getBaseKey(path_str)
+                log.info ""
+                log.info "Brain: ${key}"
+                log.info "  Input:  ${path_str}"
+                if (params.user_name) {
+                    def output_base = "${params.ssh_host}:${params.output_base_path}/${params.user_name}/${key}"
+                    log.info "  Output: ${output_base}/"
+                    log.info "    XML:          ${output_base}/${key}_unregistered.xml"
+                    log.info "    XML:          ${output_base}/${key}_registered.xml"
+                    log.info "    Registration: ${output_base}/registration/${key}_<param_combo>/"
+                } else {
+                    log.info "  Output: NOT CONFIGURED (set --user_name to enable)"
+                }
+            }
+        } else {
+            log.info "No input specified (use --brain_id or --input)"
+        }
+        log.info ""
+        log.info "========================================="
+        return
     }
 
     // Check if Fiji already exists, otherwise set it up
@@ -52,9 +83,9 @@ workflow {
     }
     
     // Handle input files - properly split comma-separated input
-    if (params.input) {
+    if (resolved_input) {
         // Split by comma, trim whitespace, and create channel
-        input_files = params.input.split(',').collect { it.trim() }
+        input_files = resolved_input.split(',').collect { it.trim() }
         //images = Channel.fromList(input_files).map { file(it) }
 
         // Separate SSH paths from local paths

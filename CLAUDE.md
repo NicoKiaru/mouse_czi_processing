@@ -26,6 +26,14 @@ This automatically constructs paths based on the data layout:
 
 The `ssh_host`, `input_base_path`, and `output_base_path` are configured in `nextflow.config` and rarely need overriding.
 
+### Dry Run (preview paths without processing)
+
+```bash
+nextflow run main.nf --brain_id MS181,LS010 --user_name Lana_Smith --dry_run
+```
+
+This prints all resolved input/output paths and exits immediately without running any processes.
+
 ### Local Execution
 
 ```bash
