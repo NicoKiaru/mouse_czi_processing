@@ -153,6 +153,15 @@ Then clone the repository `git clone https://github.com/NicoKiaru/mouse_czi_proc
 
 You should now be able to run the workflow in command line
 
+## Development
+
+To work on this project, you can:
+* install vscode and its nextflow extension
+* install nextflow (on wsl if you are on windows)
+* install apptainer
+* download a sample dataset (https://zenodo.org/records/8305531/files/Demo%20LISH%204x8%2015pct%20647.czi?download=1)
+* run a test example command line
+
 
 ## History
 
