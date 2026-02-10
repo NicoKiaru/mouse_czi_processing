@@ -120,57 +120,56 @@ servers/analysis/
 - `<brain_id>.xml` - BigStitcher XML file
 - `registration/` - Brain registration results from brainreg
 
-### SSH Access (To Be Determined)
+### SSH Access
 
-**Current Status:** SSH path for output directory not yet confirmed.
-
-**Likely format:**
 ```bash
-# Needs verification
 lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/<Full_Name>/<brain_id>/
 ```
 
-To find the SSH path, run on the cluster:
-```bash
-# From the analysis directory
-cd /home/lmsmith/servers/analysis/Lana_Smith/MS122
-readlink -f .
-# This should show the actual mounted path
-```
+This is configured as `output_base_path` in `nextflow.config` and used automatically when `--user_name` is provided.
 
 ---
 
 ## Pipeline Integration
 
-### Current Implementation
+### Usage
 
-The pipeline uses SSH paths for:
-1. **Input:** Reading `.czi` files via rsync
-2. **Output:** Publishing XML files and registration results back via SSH
+The pipeline uses `--brain_id` and `--user_name` to automatically construct input/output paths:
+
+```bash
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith -with-trace
+```
+
+The pipeline constructs:
+1. **Input:** `<ssh_host>:<input_base_path>/<brain_id>/Anatomy/<brain_id>.czi`
+2. **Output:** `<ssh_host>:<output_base_path>/<user_name>/<brain_id>/`
 
 ### File Publishing
 
-**XML Files:**
+All outputs are published to the analysis tree (`output_base_path`):
+
+**XML Files** (published to `<user_name>/<brain_id>/`):
 - `<brain_id>_unregistered.xml` - Published after initial dataset creation
 - `<brain_id>_registered.xml` - Published after stitching/registration
 
-**Registration Results:**
-- Published to subdirectories named with parameter combinations
+**Registration Results** (published to `<user_name>/<brain_id>/registration/`):
+- Subdirectories named with parameter combinations
 - Format: `<brain_id>_bending_energy_weight<value>_grid_spacing<value>_smoothing_sigma_floating<value>/`
 
 ### Example Workflow
 
 ```bash
-# Input CZI file (via SSH)
-lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/MS181/Anatomy/MS181.czi
+# Command
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith
 
-# Outputs published back to same directory:
-# - MS181_unregistered.xml
-# - MS181_registered.xml
+# Input read from:
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/MS181/Anatomy/MS181.czi
 
-# Registration results published to output directory (TBD):
-# Lana_Smith/MS181/registration/MS181_bending_energy_weight0.3_grid_spacing4_smoothing_sigma_floating-1/
-# Lana_Smith/MS181/registration/MS181_bending_energy_weight0.8_grid_spacing4_smoothing_sigma_floating-1/
+# Outputs published to:
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/MS181_unregistered.xml
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/MS181_registered.xml
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/registration/MS181_bending_energy_weight0.3_grid_spacing4_smoothing_sigma_floating-1/
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/registration/MS181_bending_energy_weight0.8_grid_spacing4_smoothing_sigma_floating-1/
 ```
 
 ---
@@ -191,7 +190,7 @@ lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/MS181/Anatomy/MS181.czi
 
 ## TODO
 
-- [ ] Determine correct SSH path for output directory (`/home/lmsmith/servers/analysis`)
+- [x] Determine correct SSH path for output directory → `lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/`
 - [ ] Confirm whether output directories need write/modify permissions
 - [ ] Document expected output file sizes for storage planning
 - [ ] Set up automated cleanup of intermediate files if needed

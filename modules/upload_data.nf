@@ -124,36 +124,44 @@ process stageFilesRSync {
 
 process copyResultsToImageFolder {
     tag "${key}_${combo.collect { k, v -> "${k}${v}" }.join('_')}" // Optional: for logging/identification
-    
-    input:
-    tuple val(key), val(ssh_path), val(combo), path(output_files), val(original_path_str)
-    
-    // No Output
-   
-    script:
-    // Parse SSH path: user@host:/path/to/file
-    def sshInfo = PathUtils.parseSshPath(original_path_str)
 
+    input:
+    tuple val(key), val(output_path), val(combo), path(output_files), val(original_path)
+
+    // No Output
+
+    script:
     // Construct the target subfolder name from the parameters
     def paramsString = combo.collect { k, v -> "${k}${v}" }.join('_')
-    def targetDir = "${sshInfo.remoteDir}/${sshInfo.basename}_${paramsString}"
+
+    // Use output_path (analysis tree) if available, otherwise fall back to input location
+    def targetInfo
+    def targetDir
+    if (output_path) {
+        targetInfo = PathUtils.parseOutputPath(output_path)
+        targetDir = "${targetInfo.remotePath}/registration/${key}_${paramsString}"
+    } else {
+        def sshInfo = PathUtils.parseSshPath(original_path)
+        targetInfo = [sshHost: sshInfo.sshHost]
+        targetDir = "${sshInfo.remoteDir}/${sshInfo.basename}_${paramsString}"
+    }
 
     """
-    echo "Create the target directory via SSH: ${sshInfo.sshHost}:${targetDir}"
-    ssh ${sshInfo.sshHost} "mkdir -p ${targetDir}"
+    echo "Create the target directory via SSH: ${targetInfo.sshHost}:${targetDir}"
+    ssh ${targetInfo.sshHost} "mkdir -p ${targetDir}"
 
     # Copy each file individually with SMB-friendly flags to remote server
     for file in ${output_files}; do
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${sshInfo.sshHost}:${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${targetInfo.sshHost}:${targetDir}/"
     done
 
     # Copy the contents of the niftyreg directory
     niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
     if [ -n "\$niftyreg_dir" ]; then
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${sshInfo.sshHost}:${targetDir}/"
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${targetInfo.sshHost}:${targetDir}/"
     fi
 
-    echo "Successfully copied results to: ${sshInfo.sshHost}:${targetDir}"
+    echo "Successfully copied results to: ${targetInfo.sshHost}:${targetDir}"
     """
 }
 

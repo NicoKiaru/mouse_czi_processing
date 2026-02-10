@@ -27,6 +27,21 @@ def ensureList(param) {
 
 workflow {
 
+    // If brain_id is provided, construct SSH input paths from the data layout
+    if (params.brain_id && !params.input) {
+        def brain_ids = params.brain_id.split(',').collect { it.trim() }
+        def constructed = brain_ids.collect { id ->
+            "${params.ssh_host}:${params.input_base_path}/${id}/Anatomy/${id}.czi"
+        }
+        params.input = constructed.join(',')
+        log.info "Constructed input paths from brain_id: ${params.input}"
+    }
+
+    // Validate user_name is set when publishing is needed
+    if (params.input && params.input.contains('@') && !params.user_name) {
+        log.warn "WARNING: --user_name not set. Output publishing to analysis directory will be disabled."
+    }
+
     // Check if Fiji already exists, otherwise set it up
     if (file("${params.fiji_cache_dir}/fiji_installation").exists()) {
         fiji_path = Channel.value("${params.fiji_cache_dir}/fiji_installation")
@@ -98,22 +113,25 @@ workflow {
     images_with_keys = images
         .map { original_path ->
             def key = PathUtils.getBaseKey(original_path)
-            tuple(key, original_path)
+            def output_path = params.user_name
+                ? "${params.ssh_host}:${params.output_base_path}/${params.user_name}/${key}"
+                : null
+            tuple(key, original_path, output_path)
         }
 
     // Join by key (inner join - only matching items)
     xml_not_stitched_with_original_paths = xml_with_keys
         .join(images_with_keys)
-        .map { key, xml_file, original_path ->
-            tuple(xml_file, original_path)
+        .map { key, xml_file, original_path, output_path ->
+            tuple(xml_file, original_path, output_path)
         }
 
     // Debug: Show the pairing
-    xml_not_stitched_with_original_paths.view { xml_file, original_path ->
-        "Will publish ${xml_file.name} alongside ${original_path}"
+    xml_not_stitched_with_original_paths.view { xml_file, original_path, output_path ->
+        "Will publish ${xml_file.name} to ${output_path ?: 'alongside ' + original_path}"
     }
-    
-    // Publish XML files to source locations
+
+    // Publish XML files to output locations
     publishInitialXmlToSource(xml_not_stitched_with_original_paths)
 
     // Channel alignment
@@ -145,16 +163,16 @@ workflow {
     // Reuse images_with_keys from earlier (channels can be consumed multiple times)
     xml_with_original_paths = xml_out_with_keys
         .join(images_with_keys)
-        .map { key, xml_file, original_path ->
-            tuple(xml_file, original_path)
+        .map { key, xml_file, original_path, output_path ->
+            tuple(xml_file, original_path, output_path)
         }
 
     // Debug: Show the pairing
-    xml_with_original_paths.view { xml_file, original_path ->
-        "Will publish final xml file ${xml_file.name} alongside ${original_path}"
+    xml_with_original_paths.view { xml_file, original_path, output_path ->
+        "Will publish final xml file ${xml_file.name} to ${output_path ?: 'alongside ' + original_path}"
     }
-    
-    // Publish XML files to source locations
+
+    // Publish XML files to output locations
     publishStitchedXmlToSource(xml_with_original_paths)
 
     // Fuse image - always splits by channel
@@ -253,17 +271,16 @@ workflow {
         tuple(key, it[1], it[2])
     }
 
-    // Process the second channel: use getBaseKey for consistent key extraction
-    def processed_images = images.map { path_str ->
-        def key = PathUtils.getBaseKey(path_str)
-        tuple(key, path_str, path_str.toString())
+    // Construct output paths for each brain using images_with_keys (which carries output_path)
+    def processed_images = images_with_keys.map { key, original_path, output_path ->
+        tuple(key, original_path, output_path)
     }
 
     // Combine the channels by the key to get all combinations
     result_and_paths = processed_results
         .combine(processed_images, by: 0)
-        .map { key, combo, output_path, ssh_path, ssh_path_string ->
-            tuple(key, ssh_path, combo, output_path, ssh_path_string)
+        .map { key, combo, result_files, original_path, output_path ->
+            tuple(key, output_path, combo, result_files, original_path)
         }
 
     copyResultsToImageFolder(result_and_paths)

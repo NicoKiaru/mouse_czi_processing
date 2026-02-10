@@ -8,13 +8,31 @@ This is a Nextflow pipeline for processing large mouse brain CZI (Zeiss) microsc
 
 ## Running the Pipeline
 
+### Recommended Usage (with brain_id)
+
+The simplest way to run the pipeline uses `--brain_id` and `--user_name`:
+
+```bash
+# Single brain
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith -with-trace
+
+# Multiple brains
+nextflow run main.nf -resume -profile slurm --brain_id MS181,LS010 --user_name Lana_Smith -with-trace
+```
+
+This automatically constructs paths based on the data layout:
+- **Input**: `<ssh_host>:<input_base_path>/<brain_id>/Anatomy/<brain_id>.czi`
+- **Output**: `<ssh_host>:<output_base_path>/<user_name>/<brain_id>/`
+
+The `ssh_host`, `input_base_path`, and `output_base_path` are configured in `nextflow.config` and rarely need overriding.
+
 ### Local Execution
 
 ```bash
 nextflow run main.nf -resume -profile local --input /path/to/file.czi -with-trace
 ```
 
-### Multiple Files
+### Multiple Files (explicit paths)
 
 ```bash
 nextflow run main.nf -resume -profile local --input /path/to/file1.czi,/path/to/file2.czi -with-trace
@@ -23,26 +41,18 @@ nextflow run main.nf -resume -profile local --input /path/to/file1.czi,/path/to/
 ### SLURM Cluster Execution
 
 ```bash
-# First, start a screen session (required for long-running transfers)
+# Start a screen session (required for long-running transfers)
 screen -S register_brains_0
 
 # Load Java module
 module load openjdk/21.0.0_35-h27dssk
 
-# Mount NAS drive if needed
-SVNAS_SHARE="smb://intranet;username@sv-nas1.rcp.epfl.ch/share-name"
-gio mount $SVNAS_SHARE
+# Run pipeline on SLURM (recommended: use --brain_id)
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith -with-trace
 
-# Run pipeline on SLURM
-nextflow run main.nf -resume -profile slurm --input /path/to/file.czi -with-trace
-```
-
-### SSH File Transfer Mode
-
-The pipeline supports processing files from remote servers via SSH:
-
-```bash
-nextflow run main.nf -resume -profile local --input user@host:/remote/path/file.czi -with-trace
+# Or with explicit SSH path (--user_name still needed for output publishing)
+nextflow run main.nf -resume -profile slurm \
+  --input user@host:/remote/path/file.czi --user_name Lana_Smith -with-trace
 ```
 
 ### Screen Session Management
@@ -78,9 +88,10 @@ The pipeline follows this processing flow:
    - `brainregRunRegistration()`: Performs atlas registration
    - `copyResultsToImageFolder()`: Transfers results back to original location
 
-4. **Result Publishing**
-   - XML files are published back to source locations alongside original CZI files
-   - Registration results are copied to image folders
+4. **Result Publishing** (requires `--user_name`)
+   - XML files are published to the output/analysis tree: `<output_base_path>/<user_name>/<brain_id>/`
+   - Registration results are published to: `<output_base_path>/<user_name>/<brain_id>/registration/`
+   - If `--user_name` is not set, a warning is shown and publishing is disabled
 
 ## Key Technical Details
 

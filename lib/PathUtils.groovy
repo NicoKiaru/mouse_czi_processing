@@ -49,4 +49,17 @@ class PathUtils {
             basename: basename
         ]
     }
+
+    /**
+     * Parses an output SSH path (directory, no file extension)
+     * Input: "user@host:/mnt/lsens-analysis/Lana_Smith/MS181"
+     * Returns: [sshHost: "user@host", remotePath: "/mnt/lsens-analysis/Lana_Smith/MS181"]
+     */
+    static Map parseOutputPath(String outputPath) {
+        def parts = outputPath.split(':')
+        return [
+            sshHost: parts[0],
+            remotePath: parts[1]
+        ]
+    }
 }

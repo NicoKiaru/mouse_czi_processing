@@ -289,34 +289,43 @@ process getVoxelSizes {
 
 process publishInitialXmlToSource {
     tag "publish xml for ${original_path.split('/')[-1]}"
-    
+
     input:
-    tuple path(xml_file), val(original_path)
-    
+    tuple path(xml_file), val(original_path), val(output_path)
+
     output:
     path "published_xml_info.txt", emit: publish_log
-    
+
     script:
-    // Parse SSH path: user@host:/path/to/file
+    // Parse the original input SSH path (for XML location field pointing to the CZI)
     def sshInfo = PathUtils.parseSshPath(original_path)
     def xmlFilename = "${sshInfo.basename}_unregistered.xml"
 
+    // Determine publish target: output tree if available, otherwise next to input
+    def targetInfo = output_path
+        ? PathUtils.parseOutputPath(output_path)
+        : [sshHost: sshInfo.sshHost, remotePath: sshInfo.remoteDir]
+
     """
-    # Modify the XML file to use the correct remote path
+    # Modify the XML file to use the correct remote path to the CZI
     sed 's|"location":"[^"]*","id":|"location":"${sshInfo.remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
 
-    # Copy the modified XML back with SMB/NFS-friendly flags
+    # Create target directory if needed
+    ssh ${targetInfo.sshHost} "mkdir -p ${targetInfo.remotePath}"
+
+    # Copy the modified XML to output directory
     rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
-        "${xmlFilename}" "${sshInfo.sshHost}:${sshInfo.remoteDir}/"
+        "${xmlFilename}" "${targetInfo.sshHost}:${targetInfo.remotePath}/"
 
     # Create log file
-    echo "Published XML file via SSH: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}" > published_xml_info.txt
+    echo "Published XML file via SSH: ${targetInfo.sshHost}:${targetInfo.remotePath}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
+    echo "Output target: ${output_path ?: 'fallback to input dir'}" >> published_xml_info.txt
     echo "Replacement path: ${sshInfo.remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
 
-    echo "Successfully published XML via rsync to: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}"
+    echo "Successfully published XML via rsync to: ${targetInfo.sshHost}:${targetInfo.remotePath}/${xmlFilename}"
     """
 }
 
@@ -324,31 +333,40 @@ process publishStitchedXmlToSource {
     tag "publish xml for ${original_path.split('/')[-1]}"
 
     input:
-    tuple path(xml_file), val(original_path)
+    tuple path(xml_file), val(original_path), val(output_path)
 
     output:
     path "published_xml_info.txt", emit: publish_log
 
     script:
-    // Parse SSH path: user@host:/path/to/file
+    // Parse the original input SSH path (for XML location field pointing to the CZI)
     def sshInfo = PathUtils.parseSshPath(original_path)
     def xmlFilename = "${sshInfo.basename}_registered.xml"
 
+    // Determine publish target: output tree if available, otherwise next to input
+    def targetInfo = output_path
+        ? PathUtils.parseOutputPath(output_path)
+        : [sshHost: sshInfo.sshHost, remotePath: sshInfo.remoteDir]
+
     """
-    # Modify the XML file to use the correct remote path
+    # Modify the XML file to use the correct remote path to the CZI
     sed 's|"location":"[^"]*","id":|"location":"${sshInfo.remotePath}","id":|g' "${xml_file}" > "${xmlFilename}"
 
-    # Copy the modified XML back with SMB/NFS-friendly flags
+    # Create target directory if needed
+    ssh ${targetInfo.sshHost} "mkdir -p ${targetInfo.remotePath}"
+
+    # Copy the modified XML to output directory
     rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \
-        "${xmlFilename}" "${sshInfo.sshHost}:${sshInfo.remoteDir}/"
+        "${xmlFilename}" "${targetInfo.sshHost}:${targetInfo.remotePath}/"
 
     # Create log file
-    echo "Published XML file via SSH: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}" > published_xml_info.txt
+    echo "Published XML file via SSH: ${targetInfo.sshHost}:${targetInfo.remotePath}/${xmlFilename}" > published_xml_info.txt
     echo "Source XML: ${xml_file}" >> published_xml_info.txt
     echo "Original image: ${original_path}" >> published_xml_info.txt
+    echo "Output target: ${output_path ?: 'fallback to input dir'}" >> published_xml_info.txt
     echo "Replacement path: ${sshInfo.remotePath}" >> published_xml_info.txt
     echo "Timestamp: \$(date)" >> published_xml_info.txt
 
-    echo "Successfully published XML via rsync to: ${sshInfo.sshHost}:${sshInfo.remoteDir}/${xmlFilename}"
+    echo "Successfully published XML via rsync to: ${targetInfo.sshHost}:${targetInfo.remotePath}/${xmlFilename}"
     """
 }
