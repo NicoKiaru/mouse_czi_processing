@@ -184,10 +184,20 @@ process brainregRunRegistration {
     
     # Run brainreg
     eval "\${BRAINREG_CMD}" 2>&1 | tee brainreg_log.txt
-    
+
+    # Rename primary channel outputs to include the original filename,
+    # matching the pattern brainreg uses for additional channels
+    PRIMARY_BASENAME=\$(basename "${primary_channel}" .tiff)
+    for prefix in downsampled downsampled_standard; do
+        if [ -f "brainreg_output/\${prefix}.tiff" ]; then
+            mv "brainreg_output/\${prefix}.tiff" "brainreg_output/\${prefix}_\${PRIMARY_BASENAME}.tiff"
+            echo "Renamed \${prefix}.tiff to \${prefix}_\${PRIMARY_BASENAME}.tiff"
+        fi
+    done
+
     echo "Brainreg processing completed for parameter combination:"
     echo "  bending_energy_weight: ${param_combo.bending_energy_weight}"
-    echo "  grid_spacing: ${param_combo.grid_spacing}" 
+    echo "  grid_spacing: ${param_combo.grid_spacing}"
     echo "  smoothing_sigma_floating: ${param_combo.smoothing_sigma_floating}"
     ls -la brainreg_output/
     """
