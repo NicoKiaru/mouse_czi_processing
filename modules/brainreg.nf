@@ -53,26 +53,27 @@ process organizeChannelsForBrainreg {
     val registration_channel
     
     output:
-    tuple path("primary_channel.tiff"), path("additional_channels.txt"), val(base_name), emit: organized_channels
-    
+    tuple path("primary/*.tiff"), path("additional_channels.txt"), val(base_name), emit: organized_channels
+
     script:
     """
     # Sort channel files to ensure consistent ordering
     SORTED_FILES=\$(ls ${channel_files} | sort -V)
     echo "Found channels:"
     echo "\${SORTED_FILES}"
-    
+
     # Count channels
     CHANNEL_COUNT=\$(echo "\${SORTED_FILES}" | wc -l)
     echo "Total channels: \${CHANNEL_COUNT}"
-    
+
     # Extract the primary channel (0-indexed)
     PRIMARY_CHANNEL=\$(echo "\${SORTED_FILES}" | sed -n "\$((${registration_channel} + 1))p")
     echo "Primary channel for registration: \${PRIMARY_CHANNEL}"
-    
-    # Copy primary channel
-    cp "\${PRIMARY_CHANNEL}" primary_channel.tiff
-    
+
+    # Copy primary channel to subdirectory, preserving its original name
+    mkdir -p primary
+    cp "\${PRIMARY_CHANNEL}" primary/
+
     # Create list of additional channels (all except primary)
     > additional_channels.txt
     CHANNEL_INDEX=0
@@ -83,7 +84,7 @@ process organizeChannelsForBrainreg {
         fi
         CHANNEL_INDEX=\$((CHANNEL_INDEX + 1))
     done
-    
+
     echo "Additional channels:"
     cat additional_channels.txt
     """
