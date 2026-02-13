@@ -187,8 +187,6 @@ process reorientToASRWithBigstitcher {
 }
 process fuseBigStitcherDataset {
     tag "fuse dataset ${xml_file.baseName}"
-    publishDir "${params.outdir}/fused_channels", mode: 'copy', pattern: "*.tiff"
-    
     input:
     path xml_file
     env FIJI_PATH

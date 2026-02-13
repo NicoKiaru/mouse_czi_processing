@@ -194,7 +194,6 @@ process brainregRunRegistration {
 
 process downloadAtlas {
     container 'python:3.11'
-    publishDir "${workflow.projectDir}/atlas_cache", mode: 'copy'
     storeDir params.atlas_cache_dir
     
     input:

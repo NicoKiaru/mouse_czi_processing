@@ -66,62 +66,11 @@ flowchart TB
     end
 ```
 
-## Using this pipeline on EPFL SCITAS cluster
+## Running the Pipeline
 
-If not already installed, you will need to [install nextflow](https://www.nextflow.io/docs/latest/install.html#self-install).
+### Recommended Usage (with `--brain_id`)
 
-You can then clone this repository or update / pull it.
-
-Then nextflow will need to be ran within a [screen session](https://scitas-doc.epfl.ch/advanced-guide/screen/). Indeed the file transfer can take a long time, and you need not to be kicked out form the session.
-
-To list all screen session in case you have some already running:
-
-```bash
-screen -ls
-```
-
-To start a screen session with the name `register_brains_0`:
-
-```bash
-screen -S register_brains_0
-```
-
-To retrieve a screen session with the name `register_brains_0`:
-
-```bash
-screen -r register_brains_0
-```
-
-Other commands for screen are:
-
-* screen -S session_name (start a new session)
-* Ctrl+a d (detach from session)
-* screen -ls (list sessions)
-* screen -r session_name (reattach to session)
-
-Once within a screen session, you will need to [mount your NAS drive](https://scitas-doc.epfl.ch/user-guide/data-management/mount-nas/) - typically where your data is located.
-
-The command will look like:
-
-```bash
-SVNAS_SHARE="smb://intranet;chiarutt@sv-nas1.rcp.epfl.ch/ptbiop-raw"
-gio mount $SVNAS_SHARE
-```
-
-The shared drive will be mounted in `/home/chiarutt/server` (with the chiarutt login)
-
-In this screen session, you will need to module the Java module:
-
-```bash
-module load openjdk/21.0.0_35-h27dssk 
-module --show-hidden av 
-```
-
-You can then run the workflow.
-
-### Recommended usage (with `--brain_id`)
-
-The simplest way to run the pipeline uses `--brain_id` and `--user_name`. The SSH paths are constructed automatically from the data layout:
+The simplest way to run the pipeline uses `--brain_id` and `--user_name`:
 
 ```bash
 # Single brain
@@ -131,32 +80,56 @@ nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Sm
 nextflow run main.nf -resume -profile slurm --brain_id MS181,LS010 --user_name Lana_Smith -with-trace
 ```
 
-### Dry run (preview paths without processing)
+This automatically constructs paths based on the data layout:
+- **Input**: `<ssh_host>:<input_base_path>/<brain_id>/Anatomy/<brain_id>.czi`
+- **Output**: `<ssh_host>:<output_base_path>/<user_name>/<brain_id>/`
 
-To check which input/output paths will be used without actually running any processing:
+The `ssh_host`, `input_base_path`, and `output_base_path` are configured in `nextflow.config` and rarely need overriding.
+
+### Dry Run (preview paths without processing)
 
 ```bash
 nextflow run main.nf --brain_id MS181,LS010 --user_name Lana_Smith --dry_run
 ```
 
-### Other examples
+This prints all resolved input/output paths and exits immediately without running any processes.
 
-Local execution with explicit path:
+### Local Execution
 
 ```bash
-nextflow run main.nf -resume -profile local --input test_data/ExampleMultiChannel.czi -with-trace
+nextflow run main.nf -resume -profile local --input /path/to/file.czi -with-trace
 ```
 
-Multiple files with explicit paths:
+### Multiple Files (explicit paths)
 
 ```bash
-nextflow run main.nf -resume -profile local --input /path/to/Small.czi,/path/to/Small3.czi
+nextflow run main.nf -resume -profile local --input /path/to/file1.czi,/path/to/file2.czi -with-trace
 ```
 
-SLURM with explicit SSH path (`--user_name` still needed for output publishing):
+### SLURM Cluster Execution
 
 ```bash
-nextflow run main.nf -resume -profile slurm --input lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/BIOP_TEST/Test.czi --user_name Lana_Smith -with-trace
+# Start a screen session (required for long-running transfers)
+screen -S register_brains_0
+
+# Load Java module
+module load openjdk/21.0.0_35-h27dssk
+
+# Run pipeline on SLURM (recommended: use --brain_id)
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith -with-trace
+
+# Or with explicit SSH path (--user_name still needed for output publishing)
+nextflow run main.nf -resume -profile slurm \
+  --input user@host:/remote/path/file.czi --user_name Lana_Smith -with-trace
+```
+
+### Screen Session Management
+
+```bash
+screen -S session_name    # Start new session
+screen -ls                # List sessions
+screen -r session_name    # Reattach to session
+# Ctrl+a d                # Detach from session
 ```
 
 ## How to set up this workflow on a SLURM cluster
