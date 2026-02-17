@@ -63,7 +63,9 @@ workflow {
                     log.info "    XML:          ${output_base}/${key}_unregistered.xml"
                     log.info "    XML:          ${output_base}/${key}_registered.xml"
                     log.info "    Channels:     ${output_base}/ch0/, ch1/, ..."
-                    log.info "    OME-Zarr:     ${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
+                    if (params.export_ome_zarr) {
+                        log.info "    OME-Zarr:     ${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
+                    }
                     log.info "    Registration: ${output_base}/registration/${key}_<param_combo>/"
                 } else {
                     log.info "  Output: NOT CONFIGURED (set --user_name to enable)"
@@ -231,7 +233,7 @@ workflow {
     }
 
     // Convert ch1 fused TIFF to OME-Zarr on local cluster storage
-    if (params.user_name) {
+    if (params.export_ome_zarr && params.user_name) {
         // Extract ch1 file from fused images and pair with brain key
         ch1_for_zarr = fused_images.named_fused_images
             .map { base_name, channel_files ->
