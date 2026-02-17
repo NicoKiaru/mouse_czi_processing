@@ -27,9 +27,13 @@ flowchart TB
     v28([reorientToASRWithBigstitcher])
     v33([publishStitchedXmlToSource])
     v34([fuseBigStitcherDataset])
+    v35([publishFusedChannelsToSource])
+    v36([convertTiffToOmeZarr])
+    v36b([publishOmeZarr])
     v37([getVoxelSizes])
     v40([organizeChannelsForBrainreg])
     v48([brainregEnvInstall])
+    v49([omeZarrEnvInstall])
     v50([downloadAtlas])
     v52([brainregRunRegistration])
     v57([copyResultsToImageFolder])
@@ -51,6 +55,10 @@ flowchart TB
     v20 --> v34
     v4 --> v34
     v25 --> v34
+    v34 --> v35
+    v34 --> v36
+    v49 --> v36
+    v36 --> v36b
     v34 --> v37
     v4 --> v37
     v34 --> v40
@@ -85,6 +93,16 @@ This automatically constructs paths based on the data layout:
 - **Output**: `<ssh_host>:<output_base_path>/<user_name>/<brain_id>/`
 
 The `ssh_host`, `input_base_path`, and `output_base_path` are configured in `nextflow.config` and rarely need overriding.
+
+### OME-Zarr Export (optional)
+
+To additionally convert the fused ch1 channel to a multi-resolution OME-Zarr pyramid, add the `--export_ome_zarr` flag:
+
+```bash
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith --export_ome_zarr -with-trace
+```
+
+This writes the OME-Zarr to the local cluster storage at `/work/lsens/<user_name>/<brain_id>/ch1.ome.zarr`. The export is disabled by default.
 
 ### Dry Run (preview paths without processing)
 

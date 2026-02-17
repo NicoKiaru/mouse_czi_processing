@@ -115,9 +115,11 @@ servers/analysis/
 
 **Output Contents:**
 - `analysis/` - Analysis results
-- `ch0/`, `ch1/`, etc. - Per-channel data
+- `ch0/`, `ch1/`, etc. - Per-channel fused TIFF data (published by pipeline)
 - `fiji_intensity/` - Fiji intensity measurements
 - `<brain_id>.xml` - BigStitcher XML file
+- `<brain_id>_unregistered.xml` - BigStitcher XML before stitching
+- `<brain_id>_registered.xml` - BigStitcher XML after stitching
 - `registration/` - Brain registration results from brainreg
 
 ### SSH Access
@@ -127,6 +129,37 @@ lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/<Full_Name>/<brain_id>/
 ```
 
 This is configured as `output_base_path` in `nextflow.config` and used automatically when `--user_name` is provided.
+
+---
+
+## OME-Zarr Output (Optional)
+
+### Base Location
+```
+/work/lsens/
+```
+
+### Directory Structure
+```
+/work/lsens/
+├── Lana_Smith/
+│   ├── MS122/
+│   │   └── ch1.ome.zarr        # Multi-resolution OME-Zarr pyramid
+│   └── MS181/
+│       └── ch1.ome.zarr
+├── Biop_User/
+│   └── MS040/
+│       └── ch1.ome.zarr
+└── ...
+```
+
+### Details
+
+- **Enabled with:** `--export_ome_zarr` flag (disabled by default)
+- **Source:** Fused ch1 TIFF from BigStitcher
+- **Format:** OME-Zarr with 6 resolution levels, chunk size `(1,1,256,256,256)`
+- **Path:** `/work/lsens/<user_name>/<brain_id>/ch1.ome.zarr`
+- **Access:** Local cluster path (no SSH needed), writable from compute nodes
 
 ---
 
@@ -152,6 +185,14 @@ All outputs are published to the analysis tree (`output_base_path`):
 - `<brain_id>_unregistered.xml` - Published after initial dataset creation
 - `<brain_id>_registered.xml` - Published after stitching/registration
 
+**Fused Channel TIFFs** (published to `<user_name>/<brain_id>/ch<N>/`):
+- Each channel from BigStitcher fusion is published to its own subfolder
+- Example: `Lana_Smith/MS181/ch0/`, `Lana_Smith/MS181/ch1/`
+
+**OME-Zarr** (published to `/work/lsens/<user_name>/<brain_id>/`, optional):
+- `ch1.ome.zarr` - Multi-resolution pyramid of the fused ch1 channel
+- Only generated when `--export_ome_zarr` is passed
+
 **Registration Results** (published to `<user_name>/<brain_id>/registration/`):
 - Subdirectories named with parameter combinations
 - Format: `<brain_id>_bending_energy_weight<value>_grid_spacing<value>_smoothing_sigma_floating<value>/`
@@ -160,7 +201,7 @@ All outputs are published to the analysis tree (`output_base_path`):
 
 ```bash
 # Command
-nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith
+nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Smith --export_ome_zarr
 
 # Input read from:
 # lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-data/MS181/Anatomy/MS181.czi
@@ -168,6 +209,9 @@ nextflow run main.nf -resume -profile slurm --brain_id MS181 --user_name Lana_Sm
 # Outputs published to:
 # lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/MS181_unregistered.xml
 # lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/MS181_registered.xml
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/ch0/<fused_C0>.tiff
+# lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/ch1/<fused_C1>.tiff
+# /work/lsens/Lana_Smith/MS181/ch1.ome.zarr  (only with --export_ome_zarr)
 # lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/registration/MS181_bending_energy_weight0.3_grid_spacing4_smoothing_sigma_floating-1/
 # lmsmith@haas056.rcp.epfl.ch:/mnt/lsens-analysis/Lana_Smith/MS181/registration/MS181_bending_energy_weight0.8_grid_spacing4_smoothing_sigma_floating-1/
 ```
