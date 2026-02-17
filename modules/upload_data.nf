@@ -165,6 +165,37 @@ process copyResultsToImageFolder {
     """
 }
 
+process publishFusedChannelsToSource {
+    tag "publish fused channels for ${base_name}"
+
+    input:
+    tuple val(base_name), path(channel_files), val(output_path)
+
+    script:
+    def targetInfo = PathUtils.parseOutputPath(output_path)
+
+    """
+    for f in ${channel_files}; do
+        # Extract channel number from filename (e.g. _C0.tiff -> 0)
+        ch_num=\$(echo "\$f" | grep -oP '_C\\K[0-9]+(?=\\.tiff)')
+        if [ -z "\$ch_num" ]; then
+            echo "WARNING: Could not extract channel number from \$f, skipping"
+            continue
+        fi
+
+        target_dir="${targetInfo.remotePath}/ch\${ch_num}"
+        echo "Publishing \$f to ${targetInfo.sshHost}:\${target_dir}/"
+
+        ssh ${targetInfo.sshHost} "mkdir -p \${target_dir}"
+
+        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \\
+            "\$f" "${targetInfo.sshHost}:\${target_dir}/"
+    done
+
+    echo "Successfully published fused channels to ${targetInfo.sshHost}:${targetInfo.remotePath}/ch*/"
+    """
+}
+
 process stageFilesRSyncSSH {
     tag "stageRSyncSSH_${ssh_path.split('/')[-1]}"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 include { setupFiji; useCachedFiji } from './modules/fiji'
 
-include { stageFilesRSync; copyResultsToImageFolder; stageFilesRSyncSSH } from './modules/upload_data'
+include { stageFilesRSync; copyResultsToImageFolder; stageFilesRSyncSSH; publishFusedChannelsToSource } from './modules/upload_data'
 
 include { 
     makeCziDatasetForBigstitcher; 
@@ -14,11 +14,13 @@ include {
     publishInitialXmlToSource;
     publishStitchedXmlToSource; } from './modules/bigstitcher'
 
-include { brainregEnvInstall; 
+include { brainregEnvInstall;
           brainregTestEnv;
           brainregRunRegistration;
           downloadAtlas;
           organizeChannelsForBrainreg } from './modules/brainreg'
+
+include { omeZarrEnvInstall; convertTiffToOmeZarr; publishOmeZarr } from './modules/ome_zarr'
 
 // Helper function to ensure parameter is a list
 def ensureList(param) {
@@ -60,6 +62,8 @@ workflow {
                     log.info "  Output: ${output_base}/"
                     log.info "    XML:          ${output_base}/${key}_unregistered.xml"
                     log.info "    XML:          ${output_base}/${key}_registered.xml"
+                    log.info "    Channels:     ${output_base}/ch0/, ch1/, ..."
+                    log.info "    OME-Zarr:     ${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
                     log.info "    Registration: ${output_base}/registration/${key}_<param_combo>/"
                 } else {
                     log.info "  Output: NOT CONFIGURED (set --user_name to enable)"
@@ -208,7 +212,45 @@ workflow {
 
     // Fuse image - always splits by channel
     fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
-    
+
+    // Publish fused channel TIFFs to analysis output (ch0/, ch1/, etc.)
+    if (params.user_name) {
+        fused_with_keys = fused_images.named_fused_images
+            .map { base_name, channel_files ->
+                def key = PathUtils.getBaseKey(base_name)
+                tuple(key, base_name, channel_files)
+            }
+
+        fused_with_output = fused_with_keys
+            .join(images_with_keys)
+            .map { key, base_name, channel_files, original_path, output_path ->
+                tuple(base_name, channel_files, output_path)
+            }
+
+        publishFusedChannelsToSource(fused_with_output)
+    }
+
+    // Convert ch1 fused TIFF to OME-Zarr on local cluster storage
+    if (params.user_name) {
+        // Extract ch1 file from fused images and pair with brain key
+        ch1_for_zarr = fused_images.named_fused_images
+            .map { base_name, channel_files ->
+                def file_list = channel_files instanceof List ? channel_files : [channel_files]
+                def ch1 = file_list.find { it.name.contains('_C1') }
+                def key = PathUtils.getBaseKey(base_name)
+                return ch1 ? tuple(key, ch1) : null
+            }
+            .filter { it != null }
+            .map { key, ch1_tiff ->
+                def zarr_path = "${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
+                tuple(key, ch1_tiff, zarr_path)
+            }
+
+        ome_zarr_env = omeZarrEnvInstall()
+        convertTiffToOmeZarr(ome_zarr_env, ch1_for_zarr)
+        publishOmeZarr(convertTiffToOmeZarr.out.zarr_result)
+    }
+
     // Process each image completely through the brainreg preparation pipeline
     image_processing = fused_images.named_fused_images
         .map { base_name, channel_files ->
