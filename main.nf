@@ -219,33 +219,12 @@ workflow {
 
     // Extract original voxel sizes from CZI (runs in parallel with makeCziDatasetForBigstitcher)
     getOriginalVoxelSizes(staged_files, fiji_path)
+    def ds = (params.bigstitcher.fusion_config.downsample ?: 1) as double
     original_voxel_sizes = getOriginalVoxelSizes.out.voxel_sizes
         .map { name, x, y, z ->
             def key = PathUtils.getBaseKey(name)
-            def vx = x as double
-            def vy = y as double
-            def vz = z as double
-            def reorient = params.bigstitcher.reorientation
-
-            // Permute voxels if ASR reorientation is enabled
-            def eff_vx = vx, eff_vy = vy, eff_vz = vz
-            if (reorient.reorient_to_asr) {
-                def permuted = permuteVoxelsToASR(reorient.raw_orientation, vx, vy, vz)
-                eff_vx = permuted[0]; eff_vy = permuted[1]; eff_vz = permuted[2]
-            }
-
-            def min_voxel = [eff_vx, eff_vy, eff_vz].min()
-            def aniso_ratio = [eff_vx, eff_vy, eff_vz].max() / min_voxel
-            def ds = (params.bigstitcher.fusion_config.downsample ?: 1) as double
-            def ds_x = ds
-            def ds_y = ds
-            def ds_z = ds
-            // Scale the anisotropic axis downsample by the anisotropy ratio
-            if (eff_vx == [eff_vx, eff_vy, eff_vz].max()) ds_x = ds * aniso_ratio
-            else if (eff_vy == [eff_vx, eff_vy, eff_vz].max()) ds_y = ds * aniso_ratio
-            else ds_z = ds * aniso_ratio
-            log.info "Anisotropy for ${name}: effective=(${eff_vx}, ${eff_vy}, ${eff_vz})μm → downsample=(${ds_x}, ${ds_y}, ${ds_z})"
-            tuple(key, ds_x, ds_y, ds_z)
+            log.info "Voxel sizes for ${name}: X=${x}μm, Y=${y}μm, Z=${z}μm → uniform downsample=${ds}"
+            tuple(key, ds, ds, ds)
         }
 
     // Makes a bigstitcher xml compatible file from the czi file

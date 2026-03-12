@@ -107,10 +107,32 @@ This writes the OME-Zarr to the local cluster storage at `/work/lsens/<user_name
 ### Dry Run (preview paths without processing)
 
 ```bash
-nextflow run main.nf --brain_id MS181,LS010 --user_name Lana_Smith --dry_run
+nextflow run main.nf -profile slurm --brain_id BIOP_TEST --user_name Biop_User --dry_run
 ```
 
 This prints all resolved input/output paths and exits immediately without running any processes.
+
+### Check Voxel Sizes (inspect anisotropy before processing)
+
+```bash
+nextflow run main.nf -resume -profile slurm --brain_id BIOP_TEST --user_name Biop_User --check_voxels
+```
+
+This stages the CZI file and extracts the original voxel sizes using Bio-Formats. It displays:
+- Original voxel sizes from the CZI file
+- Post-ASR voxel sizes (if ASR reorientation is enabled), showing how axes are permuted
+- Anisotropy ratio
+- Expected fused voxel sizes based on the configured downsample factor
+
+Useful for verifying anisotropy handling before running the full pipeline.
+
+### Fusion Only (stop before brainreg registration)
+
+```bash
+nextflow run main.nf -resume -profile slurm --brain_id BIOP_TEST --user_name Biop_User --fusion_only
+```
+
+Runs the full pipeline through stitching and fusion but stops before brainreg registration. Useful for inspecting fused output (voxel sizes, orientation) before committing to the registration step.
 
 ### Local Execution
 
