@@ -3,14 +3,15 @@ include { setupFiji; useCachedFiji } from './modules/fiji'
 
 include { stageFilesRSync; copyResultsToImageFolder; stageFilesRSyncSSH; publishFusedChannelsToSource } from './modules/upload_data'
 
-include { 
-    makeCziDatasetForBigstitcher; 
-    alignChannelsWithBigstitcher; 
-    alignTilesWithBigstitcher; 
-    icpRefinementWithBigstitcher; 
-    reorientToASRWithBigstitcher; 
+include {
+    makeCziDatasetForBigstitcher;
+    alignChannelsWithBigstitcher;
+    alignTilesWithBigstitcher;
+    icpRefinementWithBigstitcher;
+    reorientToASRWithBigstitcher;
     fuseBigStitcherDataset;
     getVoxelSizes;
+    getVoxelSizes as getOriginalVoxelSizes;
     publishInitialXmlToSource;
     publishStitchedXmlToSource; } from './modules/bigstitcher'
 
@@ -25,6 +26,41 @@ include { omeZarrEnvInstall; convertTiffToOmeZarr; publishOmeZarr } from './modu
 // Helper function to ensure parameter is a list
 def ensureList(param) {
     return param instanceof List ? param : [param]
+}
+
+// Map orientation letter to anatomical axis pair
+def letterToAxis(letter) {
+    switch(letter.toUpperCase()) {
+        case 'A': case 'P': return 'AP'
+        case 'S': case 'I': return 'SI'
+        case 'R': case 'L': return 'RL'
+        default: throw new IllegalArgumentException("Unknown orientation letter: ${letter}")
+    }
+}
+
+// Permute voxel sizes from any orientation to ASR
+// Orientation convention: 1st letter = Z, 2nd = Y, 3rd = X
+// ASR target: Z=A(AP), Y=S(SI), X=R(RL)
+def permuteVoxelsToASR(String orientation, double vx, double vy, double vz) {
+    def orig = orientation.toUpperCase()
+    // Original axes: which anatomical axis is on each image axis
+    def orig_x_axis = letterToAxis(orig[2])  // 3rd letter = X
+    def orig_y_axis = letterToAxis(orig[1])  // 2nd letter = Y
+    def orig_z_axis = letterToAxis(orig[0])  // 1st letter = Z
+
+    def orig_axes = [orig_x_axis, orig_y_axis, orig_z_axis]
+    def orig_voxels = [vx, vy, vz]
+
+    // ASR target: X=RL, Y=SI, Z=AP
+    def target_axes = ['RL', 'SI', 'AP']
+
+    def new_voxels = target_axes.collect { target_ax ->
+        def idx = orig_axes.indexOf(target_ax)
+        if (idx < 0) throw new IllegalArgumentException(
+            "Cannot find axis ${target_ax} in orientation ${orig} (axes: ${orig_axes})")
+        orig_voxels[idx]
+    }
+    return new_voxels  // [new_vx, new_vy, new_vz]
 }
 
 workflow {
@@ -137,6 +173,81 @@ workflow {
         staged_files = images
     }
     
+    // Check voxels mode: extract original voxel sizes from CZI and show fusion preview
+    if (params.check_voxels) {
+        log.info "========================================="
+        log.info "  CHECK VOXELS - Voxel size analysis"
+        log.info "========================================="
+        getOriginalVoxelSizes(staged_files, fiji_path)
+        getOriginalVoxelSizes.out.voxel_sizes.view { name, x, y, z ->
+            def vx = x as double
+            def vy = y as double
+            def vz = z as double
+            def reorient = params.bigstitcher.reorientation
+
+            // Permute voxels if ASR reorientation is enabled
+            def eff_vx = vx, eff_vy = vy, eff_vz = vz
+            if (reorient.reorient_to_asr) {
+                def permuted = permuteVoxelsToASR(reorient.raw_orientation, vx, vy, vz)
+                eff_vx = permuted[0]; eff_vy = permuted[1]; eff_vz = permuted[2]
+            }
+
+            def aniso_ratio = [eff_vx, eff_vy, eff_vz].max() / [eff_vx, eff_vy, eff_vz].min()
+            def ds = (params.bigstitcher.fusion_config.downsample ?: 1) as double
+            def fused_x = eff_vx * ds
+            def fused_y = eff_vy * ds
+            def fused_z = eff_vz * ds
+
+            def lines = []
+            lines << ""
+            lines << "--- ${name} ---"
+            lines << "  Original voxel sizes (CZI):  X=${vx}μm, Y=${vy}μm, Z=${vz}μm"
+            lines << "  Original orientation:        ${reorient.raw_orientation.toUpperCase()} (convention: 1st=Z, 2nd=Y, 3rd=X)"
+            if (reorient.reorient_to_asr) {
+                lines << "  ASR reorientation:           YES (${reorient.raw_orientation.toUpperCase()} → ASR)"
+                lines << "  Post-ASR voxel sizes:        X=${eff_vx}μm, Y=${eff_vy}μm, Z=${eff_vz}μm"
+            } else {
+                lines << "  ASR reorientation:           NO"
+            }
+            lines << "  Anisotropy ratio:            ${String.format('%.1f', aniso_ratio)}x"
+            lines << "  Downsample factor:           ${String.format('%.1f', ds)} (uniform)"
+            lines << "  Fused voxel sizes:           X=${String.format('%.1f', fused_x)}μm, Y=${String.format('%.1f', fused_y)}μm, Z=${String.format('%.1f', fused_z)}μm"
+            lines.join('\n')
+        }
+        return
+    }
+
+    // Extract original voxel sizes from CZI (runs in parallel with makeCziDatasetForBigstitcher)
+    getOriginalVoxelSizes(staged_files, fiji_path)
+    original_voxel_sizes = getOriginalVoxelSizes.out.voxel_sizes
+        .map { name, x, y, z ->
+            def key = PathUtils.getBaseKey(name)
+            def vx = x as double
+            def vy = y as double
+            def vz = z as double
+            def reorient = params.bigstitcher.reorientation
+
+            // Permute voxels if ASR reorientation is enabled
+            def eff_vx = vx, eff_vy = vy, eff_vz = vz
+            if (reorient.reorient_to_asr) {
+                def permuted = permuteVoxelsToASR(reorient.raw_orientation, vx, vy, vz)
+                eff_vx = permuted[0]; eff_vy = permuted[1]; eff_vz = permuted[2]
+            }
+
+            def min_voxel = [eff_vx, eff_vy, eff_vz].min()
+            def aniso_ratio = [eff_vx, eff_vy, eff_vz].max() / min_voxel
+            def ds = (params.bigstitcher.fusion_config.downsample ?: 1) as double
+            def ds_x = ds
+            def ds_y = ds
+            def ds_z = ds
+            // Scale the anisotropic axis downsample by the anisotropy ratio
+            if (eff_vx == [eff_vx, eff_vy, eff_vz].max()) ds_x = ds * aniso_ratio
+            else if (eff_vy == [eff_vx, eff_vy, eff_vz].max()) ds_y = ds * aniso_ratio
+            else ds_z = ds * aniso_ratio
+            log.info "Anisotropy for ${name}: effective=(${eff_vx}, ${eff_vy}, ${eff_vz})μm → downsample=(${ds_x}, ${ds_y}, ${ds_z})"
+            tuple(key, ds_x, ds_y, ds_z)
+        }
+
     // Makes a bigstitcher xml compatible file from the czi file
     makeCziDatasetForBigstitcher(staged_files, fiji_path)
 
@@ -212,8 +323,26 @@ workflow {
     // Publish XML files to output locations
     publishStitchedXmlToSource(xml_with_original_paths)
 
-    // Fuse image - always splits by channel
-    fused_images = fuseBigStitcherDataset(xml_out, fiji_path, params.bigstitcher)
+    // Join XML with per-axis downsample factors for fusion
+    xml_out_with_ds = xml_out
+        .map { xml_file ->
+            def key = PathUtils.getBaseKey(xml_file.toString())
+            tuple(key, xml_file)
+        }
+        .join(original_voxel_sizes)
+        .map { key, xml_file, ds_x, ds_y, ds_z ->
+            tuple(xml_file, ds_x, ds_y, ds_z)
+        }
+
+    // Fuse image - always splits by channel, with per-axis downsampling
+    fused_images = fuseBigStitcherDataset(
+        xml_out_with_ds.map { it[0] },
+        fiji_path,
+        params.bigstitcher,
+        xml_out_with_ds.map { it[1] },
+        xml_out_with_ds.map { it[2] },
+        xml_out_with_ds.map { it[3] }
+    )
 
     // Publish fused channel TIFFs to analysis output (ch0/, ch1/, etc.)
     if (params.user_name) {
@@ -251,6 +380,14 @@ workflow {
         ome_zarr_env = omeZarrEnvInstall()
         convertTiffToOmeZarr(ome_zarr_env, ch1_for_zarr)
         publishOmeZarr(convertTiffToOmeZarr.out.zarr_result)
+    }
+
+    // Stop here if fusion_only mode
+    if (params.fusion_only) {
+        log.info "========================================="
+        log.info "  FUSION ONLY - Skipping brainreg"
+        log.info "========================================="
+        return
     }
 
     // Process each image completely through the brainreg preparation pipeline

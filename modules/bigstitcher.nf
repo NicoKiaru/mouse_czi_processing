@@ -191,26 +191,28 @@ process fuseBigStitcherDataset {
     path xml_file
     env FIJI_PATH
     val config
-    
+    val ds_x
+    val ds_y
+    val ds_z
+
     output:
     path "*.tiff", emit: fused_images
     tuple val("${xml_file.baseName}"), path("*.tiff"), emit: named_fused_images
-    
+
     script:
     def fuse = config.fusion_config
-    def downsample = fuse.downsample ?: 1
 
     // Calculate 80% of allocated memory for Fiji (leave some for system overhead)
     def fiji_memory = task.memory ? "--mem=${(task.memory.toMega() * 0.8) as int}M" : ""
-    
+
     """
     # Fuse dataset into ome.tiff file(s) - always split by channel
     cp ${projectDir}/bin/fuse_bigstitcher_dataset.groovy .
-    
+
     OUTPUT_DIR_PATH="\$(pwd)/"
-    
+
     # Build the parameter string with proper quoting
-    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\",downsample=${downsample}"
+    PARAMS="xml_file=\\\""${xml_file}"\\\",fusion_method=\\\"${fuse.fusion_method}\\\",output_directory=\\\""\${OUTPUT_DIR_PATH}"\\\",downsample_x=${ds_x},downsample_y=${ds_y},downsample_z=${ds_z}"
     
     echo "Running fusion with parameters: \${PARAMS}"
     echo "Channels will be split into separate files"
