@@ -182,8 +182,15 @@ process brainregRunRegistration {
     echo "Full brainreg command:"
     echo "\${BRAINREG_CMD}"
     
-    # Run brainreg
+    # Run brainreg (pipefail ensures a killed/crashed brainreg propagates exit code through tee)
+    set -o pipefail
     eval "\${BRAINREG_CMD}" 2>&1 | tee brainreg_log.txt
+
+    # Verify brainreg produced actual registration output
+    if [ ! -f "brainreg_output/registered_atlas.tiff" ]; then
+        echo "ERROR: brainreg completed but registered_atlas.tiff is missing - registration likely failed (OOM?)"
+        exit 1
+    fi
 
     # Rename primary channel outputs to include the original filename,
     # matching the pattern brainreg uses for additional channels

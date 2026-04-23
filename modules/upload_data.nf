@@ -155,12 +155,6 @@ process copyResultsToImageFolder {
         rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${targetInfo.sshHost}:${targetDir}/"
     done
 
-    # Copy the contents of the niftyreg directory
-    niftyreg_dir=\$(echo ${output_files} | grep -o 'niftyreg')
-    if [ -n "\$niftyreg_dir" ]; then
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$niftyreg_dir"/ "${targetInfo.sshHost}:${targetDir}/"
-    fi
-
     echo "Successfully copied results to: ${targetInfo.sshHost}:${targetDir}"
     """
 }

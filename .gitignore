@@ -5,7 +5,7 @@ work/
 
 # Nextflow reports and traces
 *.html
-trace.txt
+trace*.txt
 timeline.html
 report.html
 dag.html
