@@ -45,18 +45,23 @@ process brainregTestEnv {
 }
 
 process organizeChannelsForBrainreg {
+    container 'python:3.11'
     tag "organize ${base_name}"
     // publishDir "${params.outdir}/brainreg_ready", mode: 'copy'
-    
+
     input:
     tuple val(base_name), path(channel_files)
     val registration_channel
-    
+    path brainreg_env
+
     output:
-    tuple path("primary/*.tiff"), path("additional_channels.txt"), val(base_name), emit: organized_channels
+    tuple path("primary"), path("additional_channels.txt"), val(base_name), env(PRIMARY_BASENAME), emit: organized_channels
 
     script:
     """
+    # brainreg_env carries tifffile (transitive dep of brainreg)
+    export PYTHONPATH=\${PWD}/${brainreg_env}:\${PYTHONPATH:-}
+
     # Sort channel files to ensure consistent ordering
     SORTED_FILES=\$(ls ${channel_files} | sort -V)
     echo "Found channels:"
@@ -70,22 +75,30 @@ process organizeChannelsForBrainreg {
     PRIMARY_CHANNEL=\$(echo "\${SORTED_FILES}" | sed -n "\$((${registration_channel} + 1))p")
     echo "Primary channel for registration: \${PRIMARY_CHANNEL}"
 
-    # Copy primary channel to subdirectory, preserving its original name
-    mkdir -p primary
-    cp "\${PRIMARY_CHANNEL}" primary/
+    # Capture primary basename so brainregRunRegistration can name its outputs
+    # after the original channel file (the primary input is now a directory).
+    export PRIMARY_BASENAME=\$(basename "\${PRIMARY_CHANNEL}" .tiff)
+    echo "Primary basename: \${PRIMARY_BASENAME}"
 
-    # Create list of additional channels (all except primary)
+    # Split primary channel into per-slice TIFFs. brainreg's slice-wise loader
+    # path parallelizes the gaussian-filter + downsample step across slices,
+    # which is ~3x faster and ~3x lower memory than the single 3D loader.
+    python3 ${projectDir}/bin/split_tiff_to_slices.py "\${PRIMARY_CHANNEL}" "primary"
+
+    # Split each additional channel into its own slice directory and record
+    # the directory paths (brainreg --additional accepts directories).
     > additional_channels.txt
     CHANNEL_INDEX=0
     for CHANNEL in \${SORTED_FILES}; do
         if [ \${CHANNEL_INDEX} -ne ${registration_channel} ]; then
-            # Write full path to the additional channels file
-            echo "\$(pwd)/\${CHANNEL}" >> additional_channels.txt
+            CHANNEL_BASE=\$(basename "\${CHANNEL}" .tiff)
+            python3 ${projectDir}/bin/split_tiff_to_slices.py "\${CHANNEL}" "\${CHANNEL_BASE}"
+            echo "\$(pwd)/\${CHANNEL_BASE}" >> additional_channels.txt
         fi
         CHANNEL_INDEX=\$((CHANNEL_INDEX + 1))
     done
 
-    echo "Additional channels:"
+    echo "Additional channel directories:"
     cat additional_channels.txt
     """
 }
@@ -100,7 +113,7 @@ process brainregRunRegistration {
     input:
     path brainreg_env
     path atlas_cache
-    tuple path(primary_channel), path(additional_channels_file), val(image_name), val(voxel_x), val(voxel_y), val(voxel_z), val(param_combo)
+    tuple path(primary_channel), path(additional_channels_file), val(image_name), val(primary_basename), val(voxel_x), val(voxel_y), val(voxel_z), val(param_combo)
     val config
     
     output:
@@ -193,12 +206,13 @@ process brainregRunRegistration {
     fi
 
     # Rename primary channel outputs to include the original filename,
-    # matching the pattern brainreg uses for additional channels
-    PRIMARY_BASENAME=\$(basename "${primary_channel}" .tiff)
+    # matching the pattern brainreg uses for additional channels.
+    # primary_basename is captured upstream because the primary input is now
+    # a directory of slices, so basename(primary_channel) would yield "primary".
     for prefix in downsampled downsampled_standard; do
         if [ -f "brainreg_output/\${prefix}.tiff" ]; then
-            mv "brainreg_output/\${prefix}.tiff" "brainreg_output/\${prefix}_\${PRIMARY_BASENAME}.tiff"
-            echo "Renamed \${prefix}.tiff to \${prefix}_\${PRIMARY_BASENAME}.tiff"
+            mv "brainreg_output/\${prefix}.tiff" "brainreg_output/\${prefix}_${primary_basename}.tiff"
+            echo "Renamed \${prefix}.tiff to \${prefix}_${primary_basename}.tiff"
         fi
     done
 

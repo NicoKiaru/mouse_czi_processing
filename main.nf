@@ -388,21 +388,28 @@ workflow {
     
     // Get voxel sizes for each image
     voxel_results = getVoxelSizes(
-        image_processing.map { base_name, channel_files, first_channel -> first_channel }, 
+        image_processing.map { base_name, channel_files, first_channel -> first_channel },
         fiji_path
     )
-    
+
+    // brainreg env is needed by organizeChannelsForBrainreg (uses tifffile to
+    // pre-split each channel into a directory of 2D slices, which lets brainreg
+    // dispatch to its parallel slice-wise loader).
+    brainreg_install = brainregEnvInstall()
+    atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
+
     // Organize channels for brainreg for each image
     organized_channels = organizeChannelsForBrainreg(
         image_processing.map { base_name, channel_files, first_channel -> tuple(base_name, channel_files) },
-        params.brainreg.channel_used_for_registration
+        params.brainreg.channel_used_for_registration,
+        brainreg_install
     )
-    
+
     // Combine everything for brainreg input using explicit key-based join
     organized_with_keys = organized_channels.organized_channels
-        .map { primary, additional, base_name ->
+        .map { primary, additional, base_name, primary_basename ->
             def key = PathUtils.getBaseKey(base_name)
-            tuple(key, primary, additional, base_name)
+            tuple(key, primary, additional, base_name, primary_basename)
         }
 
     voxel_with_keys = voxel_results.voxel_sizes
@@ -413,13 +420,13 @@ workflow {
 
     brainreg_input = organized_with_keys
         .join(voxel_with_keys)
-        .map { key, primary, additional, base_name, x, y, z ->
-            tuple(primary, additional, base_name, x, y, z)
+        .map { key, primary, additional, base_name, primary_basename, x, y, z ->
+            tuple(primary, additional, base_name, primary_basename, x, y, z)
         }
     
     // Debug: View what will be processed
-    brainreg_input.view { primary, additional, name, x, y, z -> 
-        "Ready for brainreg: ${name} using primary channel with voxel sizes: X=${x}μm, Y=${y}μm, Z=${z}μm"
+    brainreg_input.view { primary, additional, name, primary_basename, x, y, z ->
+        "Ready for brainreg: ${name} (primary=${primary_basename}) with voxel sizes: X=${x}μm, Y=${y}μm, Z=${z}μm"
     }
 
     // CREATE PARAMETER SWEEP COMBINATIONS using Nextflow channels
@@ -447,10 +454,9 @@ workflow {
     // Cross brainreg input with parameter combinations
     brainreg_sweep_input = brainreg_input.combine(param_combinations)
 
-    brainreg_install = brainregEnvInstall()
-    atlas_cache = downloadAtlas(brainreg_install, params.brainreg.atlas)
-    
     // Run brainreg with primary and additional channels
+    // (brainreg_install and atlas_cache were created above so organize step
+    // could share the same env)
     brr = brainregRunRegistration(brainreg_install,
                            atlas_cache,
                            brainreg_sweep_input,
