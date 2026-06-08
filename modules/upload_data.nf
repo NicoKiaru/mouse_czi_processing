@@ -148,11 +148,37 @@ process copyResultsToImageFolder {
 
     """
     echo "Create the target directory via SSH: ${targetInfo.sshHost}:${targetDir}"
-    ssh ${targetInfo.sshHost} "mkdir -p ${targetDir}"
+    # The destination is a CIFS/SMB share mounted with soft,retrans=1 -- any
+    # transient network blip surfaces as EIO/EHOSTDOWN. Retry mkdir and each
+    # rsync with backoff so a single blip doesn't fail the whole task.
+    for attempt in 1 2 3; do
+        if ssh ${targetInfo.sshHost} "mkdir -p ${targetDir}"; then
+            break
+        fi
+        if [ \$attempt -eq 3 ]; then
+            echo "ERROR: mkdir failed after 3 attempts"
+            exit 1
+        fi
+        echo "mkdir attempt \$attempt failed; retrying in \$((attempt * 2))s..."
+        sleep \$((attempt * 2))
+    done
 
     # Copy each file individually with SMB-friendly flags to remote server
     for file in ${output_files}; do
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${targetInfo.sshHost}:${targetDir}/"
+        success=0
+        for attempt in 1 2 3 4 5; do
+            if rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 "\$file" "${targetInfo.sshHost}:${targetDir}/"; then
+                success=1
+                break
+            fi
+            backoff=\$((2 ** attempt))
+            echo "rsync of \$file failed on attempt \$attempt; retrying in \${backoff}s..."
+            sleep \$backoff
+        done
+        if [ \$success -ne 1 ]; then
+            echo "ERROR: rsync of \$file failed after 5 attempts"
+            exit 1
+        fi
     done
 
     echo "Successfully copied results to: ${targetInfo.sshHost}:${targetDir}"
@@ -169,6 +195,10 @@ process publishFusedChannelsToSource {
     def targetInfo = PathUtils.parseOutputPath(output_path)
 
     """
+    # The destination (${targetInfo.sshHost}:${targetInfo.remotePath}) is a CIFS/SMB
+    # share; transient I/O errors (rsync exit 11/23, often AFTER the bytes are across)
+    # surface as task failures. Retry mkdir and each rsync with backoff so a single
+    # blip doesn't abort the whole run. rsync --inplace makes retries resume cheaply.
     for f in ${channel_files}; do
         # Extract channel number from filename (e.g. _C0.tiff -> 0)
         ch_num=\$(echo "\$f" | grep -oP '_C\\K[0-9]+(?=\\.tiff)')
@@ -180,10 +210,28 @@ process publishFusedChannelsToSource {
         target_dir="${targetInfo.remotePath}/ch\${ch_num}"
         echo "Publishing \$f to ${targetInfo.sshHost}:\${target_dir}/"
 
-        ssh ${targetInfo.sshHost} "mkdir -p \${target_dir}"
+        for attempt in 1 2 3; do
+            if ssh ${targetInfo.sshHost} "mkdir -p \${target_dir}"; then break; fi
+            if [ \$attempt -eq 3 ]; then echo "ERROR: mkdir failed after 3 attempts"; exit 1; fi
+            echo "mkdir attempt \$attempt failed; retrying in \$((attempt * 2))s..."
+            sleep \$((attempt * 2))
+        done
 
-        rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \\
-            "\$f" "${targetInfo.sshHost}:\${target_dir}/"
+        success=0
+        for attempt in 1 2 3 4 5; do
+            if rsync -rltvL --progress --inplace --no-perms --no-owner --no-group --no-times --modify-window=1 \\
+                "\$f" "${targetInfo.sshHost}:\${target_dir}/"; then
+                success=1
+                break
+            fi
+            backoff=\$((2 ** attempt))
+            echo "rsync of \$f failed on attempt \$attempt; retrying in \${backoff}s..."
+            sleep \$backoff
+        done
+        if [ \$success -ne 1 ]; then
+            echo "ERROR: rsync of \$f failed after 5 attempts"
+            exit 1
+        fi
     done
 
     echo "Successfully published fused channels to ${targetInfo.sshHost}:${targetInfo.remotePath}/ch*/"

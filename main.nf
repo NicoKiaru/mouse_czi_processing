@@ -21,7 +21,8 @@ include { brainregEnvInstall;
           downloadAtlas;
           organizeChannelsForBrainreg } from './modules/brainreg'
 
-include { omeZarrEnvInstall; convertTiffToOmeZarr; publishOmeZarr } from './modules/ome_zarr'
+include { omeZarrEnvInstall; convertTiffToOmeZarr; publishOmeZarr; stageFusedCh1 } from './modules/ome_zarr'
+include { spotiflowDetectKuma } from './modules/spotiflow'
 
 // Helper function to ensure parameter is a list
 def ensureList(param) {
@@ -99,7 +100,7 @@ workflow {
                     log.info "    XML:          ${output_base}/${key}_unregistered.xml"
                     log.info "    XML:          ${output_base}/${key}_registered.xml"
                     log.info "    Channels:     ${output_base}/ch0/, ch1/, ..."
-                    if (params.export_ome_zarr) {
+                    if (!params.skip_ome_zarr) {
                         log.info "    OME-Zarr:     ${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
                     }
                     log.info "    Registration: ${output_base}/registration/${key}_<param_combo>/"
@@ -259,7 +260,9 @@ workflow {
     }
 
     // Publish XML files to output locations
-    publishInitialXmlToSource(xml_not_stitched_with_original_paths)
+    if (!params.skip_results_transfer) {
+        publishInitialXmlToSource(xml_not_stitched_with_original_paths)
+    }
 
     // Channel alignment
     channel_aligned = alignChannelsWithBigstitcher(makeCziDatasetForBigstitcher.out, fiji_path, params.bigstitcher)
@@ -300,7 +303,9 @@ workflow {
     }
 
     // Publish XML files to output locations
-    publishStitchedXmlToSource(xml_with_original_paths)
+    if (!params.skip_results_transfer) {
+        publishStitchedXmlToSource(xml_with_original_paths)
+    }
 
     // Join XML with per-axis downsample factors for fusion
     xml_out_with_ds = xml_out
@@ -324,7 +329,7 @@ workflow {
     )
 
     // Publish fused channel TIFFs to analysis output (ch0/, ch1/, etc.)
-    if (params.user_name) {
+    if (params.user_name && !params.skip_results_transfer) {
         fused_with_keys = fused_images.named_fused_images
             .map { base_name, channel_files ->
                 def key = PathUtils.getBaseKey(base_name)
@@ -341,11 +346,11 @@ workflow {
     }
 
     // Convert ch1 fused TIFF to OME-Zarr on local cluster storage
-    if (params.export_ome_zarr && params.user_name) {
+    if (!params.skip_ome_zarr && params.user_name) {
         // Extract ch1 file from fused images and pair with brain key
         ch1_for_zarr = fused_images.named_fused_images
             .map { base_name, channel_files ->
-                def file_list = channel_files instanceof List ? channel_files : [channel_files]
+                def file_list = channel_files instanceof List ? new ArrayList(channel_files) : [channel_files]
                 def ch1 = file_list.find { it.name.contains('_C1') }
                 def key = PathUtils.getBaseKey(base_name)
                 return ch1 ? tuple(key, ch1) : null
@@ -361,10 +366,30 @@ workflow {
         publishOmeZarr(convertTiffToOmeZarr.out.zarr_result)
     }
 
-    // Stop here if fusion_only mode
-    if (params.fusion_only) {
+    // Spotiflow spot detection on Kuma (GPU). Normally runs on the OME-Zarr just
+    // published by the branch above. When OME-Zarr conversion is skipped
+    // (--skip_ome_zarr), it instead runs on the existing zarr already on /work —
+    // letting you re-run spotiflow without re-converting.
+    if (!params.skip_spotiflow && params.user_name) {
+        def spotiflow_zarrs
+        if (!params.skip_ome_zarr) {
+            spotiflow_zarrs = publishOmeZarr.out.published
+        } else {
+            spotiflow_zarrs = Channel
+                .fromList(params.brain_id ? params.brain_id.split(',').collect { it.trim() } : [])
+                .map { key -> tuple(key, "${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr") }
+        }
+        spotiflow_input = spotiflow_zarrs.map { key, zarr ->
+            def out_dir = "${params.ome_zarr_output_base}/${params.user_name}/detection_results/${params.spotiflow_version}/${key}"
+            tuple(key, zarr, out_dir)
+        }
+        spotiflowDetectKuma(spotiflow_input)
+    }
+
+    // Stop here if registration is skipped
+    if (params.skip_registration) {
         log.info "========================================="
-        log.info "  FUSION ONLY - Skipping brainreg"
+        log.info "  SKIP REGISTRATION - stopping after fusion"
         log.info "========================================="
         return
     }
@@ -480,6 +505,44 @@ workflow {
             tuple(key, output_path, combo, result_files, original_path)
         }
 
-    copyResultsToImageFolder(result_and_paths)
+    if (!params.skip_registration_transfer) {
+        copyResultsToImageFolder(result_and_paths)
+    }
 
+}
+
+// OME-Zarr-only entry point: skip stitching/fusion/brainreg entirely and convert
+// already-fused ch1 TIFFs (published under <output_base_path>/<user_name>/<key>/ch1/)
+// straight to OME-Zarr on local cluster storage.
+//
+// Usage:
+//   nextflow run main.nf -entry omeZarrOnly -profile slurm \
+//       --brain_id MS190,MS191,MS192 --user_name First_Last
+workflow omeZarrOnly {
+    if (!params.brain_id) {
+        error "omeZarrOnly requires --brain_id (comma-separated, e.g. --brain_id MS190,MS191)"
+    }
+    if (!params.user_name) {
+        error "omeZarrOnly requires --user_name (e.g. --user_name First_Last)"
+    }
+
+    def keys = params.brain_id.split(',').collect { it.trim() }
+    log.info "OME-Zarr-only conversion for: ${keys.join(', ')} (user: ${params.user_name})"
+
+    // Stage the already-fused ch1 TIFF for each brain from the remote analysis tree
+    stage_inputs = Channel.fromList(keys).map { key ->
+        def remote_ch1_dir = "${params.output_base_path}/${params.user_name}/${key}/ch1"
+        tuple(key, params.ssh_host, remote_ch1_dir)
+    }
+    staged = stageFusedCh1(stage_inputs)
+
+    // Pair each staged TIFF with its target zarr path
+    convert_inputs = staged.staged.map { key, ch1_tiff ->
+        def zarr_path = "${params.ome_zarr_output_base}/${params.user_name}/${key}/ch1.ome.zarr"
+        tuple(key, ch1_tiff, zarr_path)
+    }
+
+    ome_zarr_env = omeZarrEnvInstall()
+    convertTiffToOmeZarr(ome_zarr_env, convert_inputs)
+    publishOmeZarr(convertTiffToOmeZarr.out.zarr_result)
 }

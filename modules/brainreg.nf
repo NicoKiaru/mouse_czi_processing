@@ -142,9 +142,11 @@ process brainregRunRegistration {
     export PYTHONPATH=\${PWD}/${brainreg_env}:\${PYTHONPATH:-}
     export PATH=\${PWD}/${brainreg_env}/bin:\${PATH}
 
-    # Use pre-downloaded atlas cache
-    export BRAINGLOBE_HOME=\${PWD}/${atlas_cache}
-    export XDG_CONFIG_HOME=\${PWD}/${atlas_cache}
+    # Point brainglobe at the shared atlas cache.
+    # BRAINGLOBE_CONFIG_DIR is the env var brainglobe-atlasapi actually reads
+    # (see brainglobe_atlasapi/config.py). The cache must contain a bg_config.conf
+    # whose brainglobe_dir points back to the cache itself.
+    export BRAINGLOBE_CONFIG_DIR=\${PWD}/${atlas_cache}
     export HOME=\${PWD}
     
     echo "Processing image: ${image_name}"
@@ -242,10 +244,18 @@ process downloadAtlas {
     
     # Create cache directory
     mkdir -p brainglobe_cache
-    export BRAINGLOBE_HOME=\${PWD}/brainglobe_cache
-    export XDG_CONFIG_HOME=\${PWD}/brainglobe_cache
+
+    # Seed bg_config.conf so brainglobe stores atlases in the cache directory
+    # rather than the default HOME/.brainglobe. brainglobe-atlasapi reads
+    # bg_config.conf from BRAINGLOBE_CONFIG_DIR (config.py).
+    if [ ! -f brainglobe_cache/bg_config.conf ]; then
+        CACHE_ABS=\$(readlink -f brainglobe_cache)
+        printf '[default_dirs]\\nbrainglobe_dir = %s\\ninterm_download_dir = %s\\n' "\$CACHE_ABS" "\$CACHE_ABS" > brainglobe_cache/bg_config.conf
+    fi
+
+    export BRAINGLOBE_CONFIG_DIR=\${PWD}/brainglobe_cache
     export HOME=\${PWD}
-    
+
     # Download atlas
     python -c "
 from brainglobe_atlasapi.bg_atlas import BrainGlobeAtlas
